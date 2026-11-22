@@ -1,0 +1,24 @@
+name: 'Lean B2 - exact second-moment Gram algebra'
+on:
+  push:
+    paths:
+      - 'B2GramReal.lean'
+      - '.github/workflows/lean-b2-gram.yml'
+  workflow_dispatch:
+jobs:
+  b2-gram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lean via elan
+        shell: bash
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve pinned mathlib
+        run: lake update
+      - name: Restore mathlib build cache
+        run: lake exe cache get
+      - name: Kernel-check B2 exact Gram identity
+        run: lake env lean B2GramReal.lean
