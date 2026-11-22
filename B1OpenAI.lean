@@ -1,3 +1,6 @@
+import Mathlib
+import OAI.NumberTheory.DirichletL.Nonvanishing
+
 /-!
 # B1 = ∅ usando il teorema OpenAI come risultato importato
 
@@ -13,8 +16,6 @@ La struttura `ZeroFreeBox` e il sovrainsieme `BadB1` riprendono la definizione
 reale di Alpöge, mantenendo i moduli primi e i caratteri primitivi.
 -/
 
-import Mathlib
-import OAI.NumberTheory.DirichletL.Nonvanishing
 
 namespace BorghettiRH
 
