@@ -4,7 +4,9 @@
 **Laboratorio:** Teoria dello Zero, progetto RH  
 **Preparazione del codice:** GPT-6, sotto direzione del laboratorio  
 **Data:** 22 novembre 2026  
-**Stato:** **BOZZA NON COMPILATA — nessun certificato Lean ancora ottenuto**
+**Stato:** **PONTE CONDIZIONALE VERIFICATO IN LEAN (22/11/2026); collegamento con il vero teorema OpenAI NON ancora certificato.**
+
+**Evidenza:** [GitHub Actions — compilazione riuscita, run 45070169275](https://github.com/maicborg/rh-b1-verification/actions/runs/45070169275). Lean 4.34.1, Mathlib alla revisione `d13f23b7...`; `#print axioms BorghettiRH.badB1_empty`: `[propext, Classical.choice, Quot.sound]`. La dimostrazione richiede l'ipotesi esplicita `h78`, parte del suo enunciato.
 
 ## Risultato che vogliamo certificare
 
@@ -18,17 +20,20 @@ Il teorema OpenAI fornisce `L(s,χ) ≠ 0` per `Re(s)>7/8`, tranne il caso `χ=1
 
 | File | Che cosa verifica | Stato |
 |---|---|---|
-| `B1Standalone.lean` | Implicazione `h78 → BadB1=∅` in Mathlib. **h78 è un'ipotesi esplicita.** | Non compilato |
+| `B1Standalone.lean` | Implicazione `h78 → BadB1=∅` in Mathlib. **h78 è un'ipotesi esplicita.** | **Compilato e verificato**; `h78` rimane un'ipotesi dell'enunciato |
 | `B1OpenAI.lean` | Usa **il teorema OpenAI importato**, senza ipotesi `h78` aggiunta. | Non compilato; necessita del pesante progetto OpenAI |
-| `.github/workflows/lean-bridge.yml` | Dopo la pubblicazione su GitHub avvia CI **solo per il ponte condizionale**. | Non eseguito |
+| `.github/workflows/lean-b1-direct.yml` | Avvia automaticamente Lean, `lake update`, cache Mathlib, test razionale e ponte condizionale. | **Riuscito**, run `45070169275` |
+| `.github/workflows/lean-bridge.yml` | Verifica manuale alternativa del ponte condizionale. | Disponibile |
+| `.github/workflows/lean-openai-bridge.yml` | Copia il sorgente dal repository OpenAI al commit `4eaee875...` in un ambiente isolato e tenta l'import reale. | Verifica sperimentale distinta |
+| `B1RationalGap.lean` | Verifica il confronto razionale fra le soglie. | **Compilato** |
 | `CITATION.cff`, `AUTHORS.md` | Metadati attribuiti a Maicol Borghetti e riconoscimento fonti/IA. | Preparati |
 
 ## Primo controllo: solo ponte condizionale
 
-1. Caricare i file di questa cartella in un nuovo repository GitHub **separato**. Conservare il nome e i contenuti originali.
-2. In GitHub → **Actions** eseguire/consultare `Lean B1 — ponte condizionale` dopo il push; è previsto `leanprover/lean-action@v1` con Lean 4.34.1 e Mathlib fissata alla revisione `d13f23b7...`.
-3. Verde significa **soltanto** che Lean ha accettato l'implicazione condizionale. Un errore rosso richiede correzioni: il file non è stato verificato prima della consegna.
-4. Per la verifica locale, nel repository: `lake update`, `lake exe cache get`, `lake build`; consultare `#print axioms BorghettiRH.badB1_empty` nella compilazione.
+1. Il repository è pubblicato e GitHub Actions ha già verificato con successo `B1Standalone.lean`: [run 45070169275](https://github.com/maicborg/rh-b1-verification/actions/runs/45070169275).
+2. Verde certifica **soltanto** che Lean ha accettato l'implicazione condizionale: l'ipotesi `h78` non è stata ancora collegata al teorema importato.
+3. Per riprodurre localmente il controllo: `lake update`, `lake exe cache get`, `lake env lean B1RationalGap.lean` e `lake env lean B1Standalone.lean`; leggere la riga `#print axioms BorghettiRH.badB1_empty`.
+4. Le vecchie Actions rosse si sono fermate per problemi di setup/import; non costituiscono controesempi alla dimostrazione.
 
 ## Secondo controllo: teorema OpenAI effettivamente importato
 
