@@ -44,6 +44,13 @@ Il teorema OpenAI fornisce `L(s,χ) ≠ 0` per `Re(s)>7/8`, tranne il caso `χ=1
 
 Se il secondo controllo riesce, abbiamo certificato il **lemma locale in un ambiente coerente con il teorema OpenAI**. Resterebbe da verificare l'integrazione nel Lean Alpöge (toolchain 4.33.1), il risparmio effettivo di `count_bad`, la prova di `B₂` e l'originalità bibliografica.
 
+
+## B₂ — filone separato, non ancora risolto analiticamente
+
+Abbiamo aperto [B2-RESEARCH.md](B2-RESEARCH.md) con il problema preciso e [B2Budget.lean](B2Budget.lean) per formalizzare **solo il conteggio condizionale** dopo l'eliminazione di B₁: da budget individuale `η/[2(R+1)]` a `η/(R+1)`. Per questa implicazione il bound analitico di `bad_share` è ancora un'**IPOTESI ESPLICITA**; la sua dimostrazione di Alpöge non viene modificata. Il test autonomo è visibile nelle [GitHub Actions](https://github.com/maicborg/rh-b1-verification/actions/workflows/lean-b2-budget.yml).
+
+Per una semplificazione B₂ sostanziale occorre produrre una nuova stima media per `S`, oppure un rimpiazzo verificabile di `meanSqK`/`bad_share`. Non rivendichiamo questo risultato.
+
 ## Riferimenti di audit
 
 - OpenAI: https://github.com/openai/math/blob/main/lean/OAI/NumberTheory/DirichletL/Nonvanishing.lean — blob `46c67f4000906b1391a471d6e6396ac0da3c16a5` alla lettura.
