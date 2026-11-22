@@ -47,7 +47,7 @@ Se il secondo controllo riesce, abbiamo certificato il **lemma locale in un ambi
 
 ## B₂ — filone separato, non ancora risolto analiticamente
 
-Abbiamo aperto [B2-RESEARCH.md](B2-RESEARCH.md) con il problema preciso e [B2Budget.lean](B2Budget.lean) per formalizzare **solo il conteggio condizionale** dopo l'eliminazione di B₁: da budget individuale `η/[2(R+1)]` a `η/(R+1)`. Per questa implicazione il bound analitico di `bad_share` è ancora un'**IPOTESI ESPLICITA**; la sua dimostrazione di Alpöge non viene modificata. Il test autonomo è visibile nelle [GitHub Actions](https://github.com/maicborg/rh-b1-verification/actions/workflows/lean-b2-budget.yml).
+Abbiamo aperto [B2-RESEARCH.md](B2-RESEARCH.md) con il problema preciso e [B2Budget.lean](B2Budget.lean) per formalizzare **solo il conteggio condizionale** dopo l'eliminazione di B₁: da budget individuale `η/[2(R+1)]` a `η/(R+1)`. La compilazione di [B₂ è riuscita](https://github.com/maicborg/rh-b1-verification/actions/runs/45072303363), e `#print axioms` riporta solo `propext`, `Classical.choice`, `Quot.sound`. Per questa implicazione il bound analitico di `bad_share` è ancora un'**IPOTESI ESPLICITA**; la sua dimostrazione di Alpöge non viene modificata. Il test autonomo è visibile nelle [GitHub Actions](https://github.com/maicborg/rh-b1-verification/actions/workflows/lean-b2-budget.yml).
 
 Per una semplificazione B₂ sostanziale occorre produrre una nuova stima media per `S`, oppure un rimpiazzo verificabile di `meanSqK`/`bad_share`. Non rivendichiamo questo risultato.
 
