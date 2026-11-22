@@ -87,7 +87,9 @@ theorem ap_interval_error_to_correlation
     calc
       |(hi r - lo r) - (mainHi - mainLo)| =
           |(hi r - mainHi) - (lo r - mainLo)| := by ring
-      _ ≤ |hi r - mainHi| + |lo r - mainLo| := abs_sub_le _ _
+      _ ≤ |hi r - mainHi| + |lo r - mainLo| := by
+        simpa only [sub_zero, zero_sub, abs_neg] using
+          (abs_sub_le (hi r - mainHi) 0 (lo r - mainLo))
       _ ≤ EHi + ELo := add_le_add (hHi r hr) (hLo r hr)
   · exact add_nonneg hEHi hELo
 
@@ -109,7 +111,7 @@ theorem crt_product_cancellation
   calc
     (∑ t ∈ A.product B, chi t.1 * psi t.2) =
         ∑ a ∈ A, ∑ b ∈ B, chi a * psi b := by
-      rw [Finset.sum_product]
+      exact Finset.sum_product' A B (fun a b => chi a * psi b)
     _ = (∑ a ∈ A, chi a) * (∑ b ∈ B, psi b) := by
       rw [Finset.sum_mul]
       apply Finset.sum_congr rfl
