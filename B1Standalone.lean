@@ -1,3 +1,5 @@
+import Mathlib
+
 /-!
 # B1 / ZeroFreeBox — ponte di verifica (versione condizionale)
 
@@ -14,7 +16,6 @@ Origini dei risultati:
 - Mathlib: conductor e primitive Dirichlet characters.
 -/
 
-import Mathlib
 
 namespace BorghettiRH
 
