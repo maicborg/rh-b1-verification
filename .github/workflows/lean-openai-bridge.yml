@@ -1,0 +1,48 @@
+name: 'Lean B1 - verifica del teorema OpenAI importato'
+on:
+  push:
+    paths:
+      - '.github/workflows/lean-openai-bridge.yml'
+      - 'B1OpenAI.lean'
+  workflow_dispatch:
+
+jobs:
+  openai-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: 'Checkout Borghetti verification source'
+        uses: actions/checkout@v4
+        with:
+          path: bridge
+      - name: 'Checkout pinned OpenAI math, sparse source'
+        uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - name: 'Put experimental bridge in isolated OpenAI tree'
+        shell: bash
+        run: |
+          cp bridge/B1OpenAI.lean upstream/lean/B1OpenAI.lean
+          test -f upstream/lean/OAI/NumberTheory/DirichletL/Nonvanishing.lean
+      - name: 'Install Lean via elan'
+        shell: bash
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: 'Resolve pinned upstream dependencies'
+        working-directory: upstream/lean
+        run: lake update
+      - name: 'Restore mathlib cache'
+        working-directory: upstream/lean
+        run: lake exe cache get
+      - name: 'Compile original OpenAI theorem module'
+        working-directory: upstream/lean
+        run: lake build OAI.NumberTheory.DirichletL.Nonvanishing
+      - name: 'Compile B1 proof from actual OpenAI theorem'
+        working-directory: upstream/lean
+        run: lake env lean B1OpenAI.lean
