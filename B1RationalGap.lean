@@ -1,3 +1,5 @@
+import Mathlib
+
 /-!
 # RH-B1: confronto delle soglie di non annullamento
 
@@ -5,7 +7,6 @@ Direzione concettuale del programma RH: Maicol Borghetti (@maicborg).
 Formalizzazione assistita: GPT-6.
 Questa è un'identità razionale elementare; non è un nuovo teorema RH.
 -/
-import Mathlib
 
 namespace RH_B1
 
