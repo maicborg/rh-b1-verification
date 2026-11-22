@@ -1,15 +1,23 @@
-name: 'Lean B1 — ponte condizionale (NON certifica OpenAI)'
+name: 'Lean B1 - verifica manuale ponte condizionale'
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+
 jobs:
   bridge:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: 'Lean e verifica del ponte condizionale'
-        uses: leanprover/lean-action@v1
-        with:
-          build: true
-          use-mathlib-cache: true
+      - name: Install Lean via elan
+        shell: bash
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies
+        run: lake update
+      - name: Download Mathlib cache
+        run: lake exe cache get
+      - name: Verify rational inequality
+        run: lake env lean B1RationalGap.lean
+      - name: Verify conditional B1 bridge
+        run: lake env lean B1Standalone.lean
