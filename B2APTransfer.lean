@@ -36,6 +36,7 @@ theorem ap_error_to_weighted_correlation
     calc
       _ = (∑ r ∈ R, sigma r * (count r - main)) +
             main * (∑ r ∈ R, sigma r) := by
+              rw [mul_comm main (∑ r ∈ R, sigma r), Finset.sum_mul]
               rw [← Finset.sum_add_distrib]
               apply Finset.sum_congr rfl
               intro r hr
