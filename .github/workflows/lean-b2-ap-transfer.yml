@@ -1,0 +1,25 @@
+name: 'Lean B2 - prime progression correlation transfer'
+on:
+  push:
+    paths:
+      - 'B2APTransfer.lean'
+      - '.github/workflows/lean-b2-ap-transfer.yml'
+  workflow_dispatch:
+jobs:
+  b2-ap-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Lean via elan
+        shell: bash
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve Mathlib dependencies
+        run: lake update
+      - name: Download Mathlib build cache
+        run: lake exe cache get
+      - name: Compile prime AP to correlation transfer
+        run: lake env lean B2APTransfer.lean
