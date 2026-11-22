@@ -17,7 +17,7 @@ Sorgenti fissate al commit `7cbf7a0c32fca1badf05931879a37c3f8a2b03b4`:
 - [BadShare.lean](https://github.com/CocoSgt/riemann-hypothesis-lean/blob/7cbf7a0c32fca1badf05931879a37c3f8a2b03b4/src/Development/AutomorphicArithmetic/MeanSquareBounds/BadShare.lean), teorema `bad_share` alle righe 251–254.
 
 ## Prova B₂ attuale del nostro repository
-Il file [B2Budget.lean](./B2Budget.lean) tenta di certificare un **lemma combinatorio condizionale**:
+Il file [B2Budget.lean](./B2Budget.lean) ha **compilato correttamente in Lean 4.34.1**: [GitHub Actions run 45072303363](https://github.com/maicborg/rh-b1-verification/actions/runs/45072303363). Verifica un **lemma combinatorio condizionale**:
 se B₁ è vuoto, B è coperto dall'unione di B₂(ξ), |Ξ|≤R e, per ogni ξ,
 `|B₂(ξ)| ≤ η/(R+1) · |P|`, allora `|B| ≤ η |P|`.
 
@@ -29,4 +29,4 @@ La stima `|B₂(ξ)| ≤ η/(R+1) |P|` è **IPOTESI ESPLICITA del lemma** e non 
 3. Integrare il nuovo lemma nel proof term Alpöge `QH.stage` (toolchain originale 4.33.1), senza `sorry`, e verificare quali dipendenze e soglie siano effettivamente eliminate.
 4. Confrontare ogni novità con la letteratura più recente, incluse le semplificazioni terze pubblicate il 21 novembre 2026.
 
-**Situazione: B₁ condizionale verificato da Lean; B₂ solo conteggio condizionale in test; nessuna nuova prova analitica di B₂ e nessuna nuova dimostrazione RH.**
+**Situazione: B₁ condizionale verificato da Lean; B₂ conteggio condizionale verificato da Lean, assiomi [propext, Classical.choice, Quot.sound]; nessuna nuova prova analitica di B₂ e nessuna nuova dimostrazione RH.**
