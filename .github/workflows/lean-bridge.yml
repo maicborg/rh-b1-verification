@@ -1,0 +1,15 @@
+name: 'Lean B1 — ponte condizionale (NON certifica OpenAI)'
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Lean e verifica del ponte condizionale'
+        uses: leanprover/lean-action@v1
+        with:
+          build: true
+          use-mathlib-cache: true
