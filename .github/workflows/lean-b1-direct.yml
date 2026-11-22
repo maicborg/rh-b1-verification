@@ -1,6 +1,12 @@
 name: 'Lean B1 - prova autonoma del ponte (condizionale)'
 on:
   push:
+    paths:
+      - 'B1Standalone.lean'
+      - 'B1RationalGap.lean'
+      - 'lakefile.toml'
+      - 'lean-toolchain'
+      - '.github/workflows/lean-b1-direct.yml'
   workflow_dispatch:
 
 jobs:
