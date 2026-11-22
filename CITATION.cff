@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: >-
+  Citare questo progetto come una nota di verifica preliminare; non come
+  dimostrazione originale di RH o formalizzazione già verificata.
+title: 'RH B1: ponte di verifica OpenAI 7/8–Alpöge (pre-compiler audit)'
+version: 0.1.0
+abstract: >-
+  Riproduzione sperimentale di una riduzione locale nella prova Alpöge:
+  il teorema zero-free 7/8 di OpenAI può svuotare il sottinsieme B1.
+  Il pacchetto non è ancora stato compilato in Lean.
+authors:
+  - family-names: Borghetti
+    given-names: Maicol
+    affiliation: Laboratorio RH — Teoria dello Zero
+keywords:
+  - Lean 4
+  - Riemann hypothesis
+  - Dirichlet L-functions
+  - formal verification

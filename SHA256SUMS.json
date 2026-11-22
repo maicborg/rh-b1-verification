@@ -1,0 +1,10 @@
+{
+  ".github/workflows/lean-bridge.yml": "db464975746c0ecf4dbe613568d87f868f640706ae7601a57a92565f44b39d00",
+  "AUTHORS.md": "5c28932733a7de02a7da6d1bf709d00aa902f5f344e8111b626f7af2c9551d15",
+  "B1OpenAI.lean": "425bd16a918232ea5f1f31b84f483ce156c4cafa9cf98a58e6d7cb51b52582f5",
+  "B1Standalone.lean": "9d71acdb4dac13e0c71991fecb2051cb5d43f0a766d35554d304670a734f7505",
+  "CITATION.cff": "a8ca79abd312d089d132d8a48a827b7ee54aed89e3fb0cb585c4d71955b0201e",
+  "README.md": "0070259e12736703e8f951de694bd71c30fce76be253ad8c7ff521b4c05db427",
+  "lakefile.toml": "e6cca5c07e257e5515bd756aaf76d5ea5fc399ecabb6e227711d5acad7d23d53",
+  "lean-toolchain": "d5edba4e4b8faad9c1baeadb265716d20d03be4d1a2647dc5e35b0c0325bea7b"
+}
