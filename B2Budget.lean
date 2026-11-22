@@ -50,7 +50,6 @@ theorem b2_budget_after_b1_empty
     _ = η * (P.card : ℝ) := by
       have hden : (R : ℝ) + 1 ≠ 0 := by positivity
       field_simp
-      ring
 
 #print axioms BorghettiRH.b2_budget_after_b1_empty
 
