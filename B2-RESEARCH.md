@@ -1,3 +1,5 @@
+> **Nuova linea analitica del 22/11/2026 — non ancora Lean verificata:** [B2-Q78-QUADRATIC-CORRELATION-RESEARCH.md](B2-Q78-QUADRATIC-CORRELATION-RESEARCH.md). Propone di ricavare da QRH(7/8) una stima uniforme dei primi in progressioni, sostituendo nel mean square di B₂ l'analisi dell'eccezione nstar e il passaggio twistK con correlazioni quadratiche di simboli di Jacobi. Documento di ricerca con ipotesi, bounds, falsificatori e un test numerico dell'identità. Il solo `B2Budget.lean` è kernel verificato; il nuovo rimpiazzo analitico NON lo è.
+
 # B₂ — stato della ricerca (22 novembre 2026)
 
 Direzione di ricerca: Maicol Borghetti (@maicborg), laboratorio RH Teoria dello Zero.
