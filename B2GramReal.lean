@@ -123,4 +123,23 @@ theorem gram_complex_expansion
 
 #print axioms BorghettiRH.gram_complex_expansion
 
+/--
+Cauchy-Schwarz for the real Gram coefficient of two complex vectors,
+using that this coefficient is the real part of z * conj w.
+-/
+theorem gram_bilinear_coefficient_le (z w : ℂ) :
+    |z.re * w.re + z.im * w.im| ≤ ‖z‖ * ‖w‖ := by
+  have hre : z.re * w.re + z.im * w.im =
+      (z * Complex.conj w).re := by
+    simp only [Complex.mul_re, Complex.conj_re, Complex.conj_im]
+    ring
+  calc
+    |z.re * w.re + z.im * w.im| =
+        |(z * Complex.conj w).re| := by rw [hre]
+    _ ≤ ‖z * Complex.conj w‖ := Complex.abs_re_le_norm _
+    _ = ‖z‖ * ‖w‖ := by simp [norm_mul]
+
+#print axioms BorghettiRH.gram_bilinear_coefficient_le
+
+
 end BorghettiRH
