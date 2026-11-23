@@ -1,0 +1,83 @@
+name: "B2 - experiment actual OpenAI source in pinned Alpoge toolchain"
+on:
+  push:
+    paths:
+      - '.github/workflows/lean-b2-oai-source-alpoge-bridge.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cross-toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+    steps:
+      - name: Checkout pinned Alpoge
+        uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            lean-toolchain
+            lakefile.toml
+            lake-manifest.json
+            src
+      - name: Checkout actual pinned OpenAI Lean source
+        uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: oai
+          filter: blob:none
+          sparse-checkout: |
+            lean/OAI
+      - name: Install elan
+        working-directory: alpoge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Copy OpenAI source only into disposable Alpoge clone
+        run: |
+          cp -a oai/lean/OAI alpoge/src/OAI
+          cat >> alpoge/lakefile.toml <<'EOF'
+          [[lean_lib]]
+          name = "OAI"
+          globs = ["OAI.+"]
+          EOF
+          test -f alpoge/src/OAI/NumberTheory/DirichletL/Nonvanishing.lean
+      - name: Resolve Mathlib pinned to Alpoge
+        working-directory: alpoge
+        run: |
+          lake update
+          lake exe cache get
+      - name: Restore Alpoge cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            alpoge-b2-0df444-${{ runner.os }}-
+      - name: Test actual OAI 7/8 theorem on exact Alpoge 4.33 toolchain
+        working-directory: alpoge
+        timeout-minutes: 230
+        run: |
+          lake build OAI.NumberTheory.DirichletL.Nonvanishing
+      - name: Kernel inspect actual imported OAI theorem
+        working-directory: alpoge
+        run: |
+          printf '\n#print axioms OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re\n' >> src/OAI/NumberTheory/DirichletL/Nonvanishing.lean
+          set -o pipefail
+          lake env lean src/OAI/NumberTheory/DirichletL/Nonvanishing.lean 2>&1 | tee /tmp/oai-7-8-alpoge.log
+          if grep -E '^ *sorryAx' /tmp/oai-7-8-alpoge.log; then exit 1; fi
+      - name: Save cache
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
