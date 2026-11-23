@@ -1,0 +1,31 @@
+name: "B2 - quantitative budget no additional ratio"
+on:
+  push:
+    paths:
+      - 'B2SmallErrorBudget.lean'
+      - '.github/workflows/lean-b2-small-error-budget.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Install Mathlib dependencies
+        run: |
+          lake update
+          lake exe cache get
+      - name: Kernel check and axioms
+        run: |
+          set -o pipefail
+          lake env lean B2SmallErrorBudget.lean 2>&1 | tee /tmp/b2-small-error-budget.log
+          if grep -q 'sorryAx' /tmp/b2-small-error-budget.log; then exit 1; fi
+      - name: No placeholders
+        run: |
+          if grep -nE '\b(sorry|admit|axiom)\b' B2SmallErrorBudget.lean; then exit 1; fi
