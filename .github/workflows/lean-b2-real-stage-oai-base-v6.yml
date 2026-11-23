@@ -1,0 +1,160 @@
+name: "B2 - StagePow same-kernel with 7 extra Mathlib fixes v6"
+on:
+  push:
+    paths:
+      - ".github/workflows/lean-b2-real-stage-oai-base-v6.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  single-kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout original OpenAI Lean project pinned
+        uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: |
+            lean
+      - name: Checkout original Alpoge pinned
+        uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            src
+      - name: Checkout verification lemmas
+        uses: actions/checkout@v4
+        with:
+          path: bridge
+      - name: Copy Alpoge sources into disposable original OpenAI project
+        run: |
+          set -eu
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          for f in B2NoExceptional B2JacobiClassZero B2IntegratedBridge B2JacobiRelativeActual B2PrimeSetOneEndpoint B2SmallErrorBudget B2CountRelativeActualV3 B2AdmittedLogModulusV3 B2PNTThresholdFromBudget B2UniformPNTFromAdmittedV4 B2JacobiEnvelopeV3 B2ExponentFromAdmittedV4 B2LowEndpointDecayV2 B2TwistKNoExceptionConditionalV5 B2RealPNT; do
+            cp "bridge/$f.lean" upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          done
+      - name: Apply additional Mathlib API substitutions and repaired tactics in disposable Alpoge source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('upstream/lean')
+          fixes={
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/ExistsFarFromPoints.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',1)],
+            'Formalism/ZeroFreeRegion/ZetaLogDerivativeBounds/LandauLocalOf.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',2)],
+            'Formalism/LandauZeroFreeBounds/ExceptionalZeroBounds/SameCharacterLFunctionOne.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',2),('Finset.prod_le_one','Finset.prod_le_one₀',1)],
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/Turan2Main.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',1)],
+            'Formalism/LandauZeroFreeBounds/ExceptionalZeroBounds/ExistsLocalZeroExpansionOfBound.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',2)],
+            'Formalism/LandauZeroFreeBounds/ExceptionalZeroBounds/EulerFactorLogDerivBound.lean':
+              [('logDeriv_prod (f :=','logDeriv_fun_prod (f :=',1)],
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/PNTDHLocalA.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',1)],
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/PNTExplLF.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',1)],
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/PNTExplLoc.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',2)],
+            'Formalism/LFunctionBounds/LFunctionBoundsProofs/DivisorBound.lean':
+              [('Finset.prod_le_prod','Finset.prod_le_prod₀',1)]
+          }
+          for path, reps in fixes.items():
+            f=root/path; t=f.read_text()
+            for a,b,n in reps:
+              assert t.count(a)==n,(path,a,t.count(a),n)
+              t=t.replace(a,b)
+            f.write_text(t)
+          # Mathlib 4.34 `gcongr` produces just the exponent inequality; omega closes it.
+          for path in [
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/SecondBlockCount.lean',
+            'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/ZeroCountFirst.lean'
+          ]:
+            f=root/path; t=f.read_text()
+            old='gcongr\n             · norm_num\n             · omega'
+            assert t.count(old)==1,(path,'gcongr shape',t.count(old))
+            f.write_text(t.replace(old,'gcongr\n             omega'))
+          f=root/'Formalism/GL3MeanSquares/GenusMeanAsymptotics/JacobiCharacterSums/MSqTwistB.lean'
+          t=f.read_text()
+          old1='exact Nat.Coprime.mul hb.2.2 hus'
+          old2='Nat.Coprime.mul (Nat.Coprime.coprime_dvd_right'
+          assert t.count(old1)==1 and t.count(old2)==1
+          t=t.replace(old1,'exact Nat.Coprime.mul_left hb.2.2 hus')
+          t=t.replace(old2,'Nat.Coprime.mul_left (Nat.Coprime.coprime_dvd_right')
+          f.write_text(t)
+          f=root/'Development/AutomorphicArithmetic/MeanSquareBounds/meanSqK.lean'
+          t=f.read_text()
+          orig='import Development.AutomorphicArithmetic.MeanSquareBounds.twistK'
+          replacement='import Development.AutomorphicArithmetic.MeanSquareBounds.B2TwistKNoExceptionConditionalV5\nimport Development.AutomorphicArithmetic.MeanSquareBounds.B2RealPNT'
+          assert t.count(orig)==1
+          t=t.replace(orig,replacement,1)
+          orig=':= twistK ε (800 * K) (K + 1)'
+          replacement=':= b2_twistK_no_exception_of_seven_eighths_v5 BorghettiRH.b2_actual_h78 ε (800 * K) (K + 1)'
+          assert t.count(orig)==1
+          t=t.replace(orig,replacement,1)
+          f.write_text(t+'\n#print axioms QH.meanSqK\n')
+          f=root/'Development/AutomorphicArithmetic/MeanSquareBounds/StagePow.lean'
+          f.write_text(f.read_text()+'\n#print axioms QH.stage\n')
+          print('Alpoge meanSqK now uses ACTUAL OAI proof term, not an h78 parameter; upstream intact')
+          PY
+      - name: Install elan in OpenAI project
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve full pinned OpenAI project dependencies
+        working-directory: upstream/lean
+        timeout-minutes: 60
+        run: |
+          lake update
+          lake exe cache get
+      - name: Restore OpenAI cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            upstream/lean/.lake/build
+            upstream/lean/.lake/packages/*/.lake/build
+          key: oai4341-4eaee875-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            oai4341-4eaee875-${{ runner.os }}-
+      - name: Build unchanged theorem target StagePow using actual OAI h78
+        working-directory: upstream/lean
+        timeout-minutes: 290
+        run: |
+          set -o pipefail
+          lake build Development.AutomorphicArithmetic.MeanSquareBounds.StagePow 2>&1 | tee /tmp/b2-real-stage-v5-build.log
+      - name: Audit actual OpenAI B2 and stage axioms
+        working-directory: upstream/lean
+        run: |
+          set -o pipefail
+          for f in B2RealPNT meanSqK StagePow; do
+            lake env lean Development/AutomorphicArithmetic/MeanSquareBounds/$f.lean 2>&1 | tee /tmp/b2-v5-$f.log
+            if grep -q sorryAx /tmp/b2-v5-$f.log; then echo "sorryAx in $f" >&2; exit 1; fi
+          done
+      - name: Record outcome
+        if: ${{ always() }}
+        run: |
+          echo "B2 stage v6 actual OAI 7/8 + Alpoge in ONE kernel with 13 adapted modules." >> "$GITHUB_STEP_SUMMARY"
+          echo "No modification to either original repository. A green build AND no sorryAx in final axioms are mandatory." >> "$GITHUB_STEP_SUMMARY"
