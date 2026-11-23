@@ -1,0 +1,139 @@
+name: "B2 - port pinned OpenAI 7/8 into Alpoge 4.33 - mathlib shims"
+on:
+  push:
+    paths:
+      - '.github/workflows/lean-b2-oai-alpoge-shims-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  port-oai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 320
+    steps:
+      - name: Checkout Alpoge pinned 4.33.1
+        uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            lean-toolchain
+            lakefile.toml
+            lake-manifest.json
+            src
+      - name: Checkout pinned actual OpenAI source
+        uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: oai
+          filter: blob:none
+          sparse-checkout: |
+            lean/OAI
+      - name: Checkout required Mathlib 4.34 source shims
+        uses: actions/checkout@v4
+        with:
+          repository: leanprover-community/mathlib4
+          ref: d13f23b723b8a846827a245b89c10fc7d3f11612
+          path: ml_new
+          filter: blob:none
+          sparse-checkout: |
+            Mathlib/Analysis/Asymptotics
+      - name: Install elan
+        working-directory: alpoge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Copy OpenAI and append isolated Lake library
+        run: |
+          cp -a oai/lean/OAI alpoge/src/OAI
+          cat >> alpoge/lakefile.toml <<'EOF'
+          [[lean_lib]]
+          name = "OAI"
+          globs = ["OAI.+"]
+          EOF
+      - name: Resolve pinned Alpoge mathlib and cache
+        working-directory: alpoge
+        run: |
+          lake update
+          lake exe cache get
+      - name: Restore previous Alpoge cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            alpoge-b2-0df444-${{ runner.os }}-
+      - name: Overlay only two missing Mathlib modules and fix tactic drift
+        run: |
+          mkdir -p alpoge/.lake/packages/mathlib/Mathlib/Analysis/Asymptotics
+          cp ml_new/Mathlib/Analysis/Asymptotics/Arith.lean alpoge/.lake/packages/mathlib/Mathlib/Analysis/Asymptotics/Arith.lean
+          cp ml_new/Mathlib/Analysis/Asymptotics/Ring.lean alpoge/.lake/packages/mathlib/Mathlib/Analysis/Asymptotics/Ring.lean
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path("alpoge/src/OAI/NumberTheory/DirichletL")
+          a=base/"ContinuationPolynomialContour.lean"
+          s=a.read_text()
+          old="""  convert hg.add hp using 1
+            funext y
+            simp [polynomialGaussian, add_mul]"""
+          if old not in s:
+            old="  convert hg.add hp using 1\n  funext y\n  simp [polynomialGaussian, add_mul]"
+          assert old in s, "Expected OAI polynomial gaussian proof fragment"
+          new="""  have hsum : Integrable
+                (fun y : ℝ => Real.exp (-1*y^2) + |y|^n*Real.exp (-(y^2))) := by
+              simpa only [Pi.add_apply] using hg.add hp
+            have hfun : polynomialGaussian n =
+                (fun y : ℝ => Real.exp (-1*y^2) + |y|^n*Real.exp (-(y^2))) := by
+              funext y
+              simp [polynomialGaussian, add_mul]
+            rw [hfun]
+            exact hsum"""
+          # Dedent the replacement to the original proof indentation.
+          new="\n".join(("  "+line.lstrip() if idx==0 else
+                         "    "+line.lstrip() if idx in (1,2,4,6,7) else
+                         "  "+line.lstrip())
+                        for idx,line in enumerate(new.splitlines()))
+          # Reliable direct replacement preserving standard Lean indentation.
+          new="""  have hsum : Integrable
+                (fun y : ℝ => Real.exp (-1 * y ^ 2) + |y| ^ n * Real.exp (-(y ^ 2))) := by
+            simpa only [Pi.add_apply] using hg.add hp
+          have hfun : polynomialGaussian n =
+              (fun y : ℝ => Real.exp (-1 * y ^ 2) + |y| ^ n * Real.exp (-(y ^ 2))) := by
+            funext y
+            simp [polynomialGaussian, add_mul]
+          rw [hfun]
+          exact hsum"""
+          # Lean uses offside; lines in this replacement are explicitly shaped.
+          a.write_text(s.replace(old,new))
+          b=base/"CubicDyadicDecay.lean"
+          s=b.read_text()
+          old="    convert hi using 1\n    ring"
+          assert old in s, "Expected OAI cubic dyadic proof fragment"
+          b.write_text(s.replace(old,"    convert hi using 1 <;> try ring"))
+          print("All patches ephemeral, no OAI/Alpoge upstream changes")
+          PY
+      - name: Try compile authentic OpenAI theorem on Alpoge Mathlib
+        working-directory: alpoge
+        timeout-minutes: 220
+        run: lake build OAI.NumberTheory.DirichletL.Nonvanishing
+      - name: Inspect actual OAI 7/8 axioms
+        working-directory: alpoge
+        run: |
+          printf '\n#print axioms OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re\n' >> src/OAI/NumberTheory/DirichletL/Nonvanishing.lean
+          set -o pipefail
+          lake env lean src/OAI/NumberTheory/DirichletL/Nonvanishing.lean 2>&1 | tee /tmp/b2-port-oai-v2.log
+          if grep -E '^ *sorryAx' /tmp/b2-port-oai-v2.log; then exit 1; fi
+      - name: Save cache
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
