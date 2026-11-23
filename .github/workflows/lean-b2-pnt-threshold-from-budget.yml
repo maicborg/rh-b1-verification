@@ -1,0 +1,31 @@
+name: "B2 - PNT uniform threshold independent of twistK"
+on:
+  push:
+    paths:
+      - 'B2PNTThresholdFromBudget.lean'
+      - '.github/workflows/lean-b2-pnt-threshold-from-budget.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies
+        run: |
+          lake update
+          lake exe cache get
+      - name: Kernel check and axioms
+        run: |
+          set -o pipefail
+          lake env lean B2PNTThresholdFromBudget.lean 2>&1 | tee /tmp/b2-threshold.log
+          if grep -q sorryAx /tmp/b2-threshold.log; then exit 1; fi
+      - name: Reject placeholders
+        run: |
+          if grep -nE '\b(sorry|admit|axiom)\b' B2PNTThresholdFromBudget.lean; then exit 1; fi
