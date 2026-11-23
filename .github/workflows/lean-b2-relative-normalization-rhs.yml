@@ -1,0 +1,23 @@
+name: B2 relative normalization RH-S
+on:
+  push:
+    paths:
+      - 'B2RelativeNormalizationRHS.lean'
+      - '.github/workflows/lean-b2-relative-normalization-rhs.yml'
+  workflow_dispatch:
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          build: false
+          test: false
+      - name: Kernel-check normalization
+        run: lake env lean B2RelativeNormalizationRHS.lean
+      - name: Check forbidden axioms
+        run: |
+          if grep -nE 'sorry|admit|axiom ' B2RelativeNormalizationRHS.lean; then exit 1; fi
