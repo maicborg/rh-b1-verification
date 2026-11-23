@@ -87,4 +87,122 @@ theorem b2_jacobi_cls_sum_zero
   linarith
 
 #print axioms Formalism.HermitianLattices.Ext.LogarithmicIntegralBounds.b2_jacobi_cls_sum_zero
+/--
+Exact one-endpoint conversion of a UNIFORM per-residue AP estimate
+to a bound for the original Alpoge PPset Jacobi sum.
+
+The analytic AP estimate hAP is EXPLICITLY AN ASSUMPTION here:
+the paper's quantitative 11/12 corollary is NOT imported as a Lean theorem.
+All other facts are proved using Alpoge's own exact sum decomposition,
+small prime count, CRT residue class size and the cancellation above.
+-/
+theorem b2_jacobi_bound_of_uniform_AP
+    (m s a : ℕ) (hm : 0 < m) (hs : 1 < s)
+    (hodd : Odd s) (hsquare : Squarefree s)
+    (hcop : s.Coprime m) (U main E : ℝ)
+    (hU : 0 ≤ U) (hE : 0 ≤ E)
+    (hAP : ∀ b ∈ clsB m s a,
+        |(piAP U (m * s) b : ℝ) - main| ≤ E) :
+    |∑ q ∈ PPset m a U, (jacobiSym (q : ℤ) s : ℝ)| ≤
+      (s.totient : ℝ) * E + U ^ (1 / 2 : ℝ) := by
+  classical
+  let R := clsB m s a
+  let σ : ℕ → ℝ := fun b => (jacobiSym (b : ℤ) s : ℝ)
+  let N : ℕ → ℝ := fun b =>
+    (((PPset m a U).filter (fun q => q % (m * s) = b)).card : ℝ)
+  let H : ℕ → ℝ := fun b => (piAP U (m * s) b : ℝ)
+  let T : ℕ → ℝ := fun b => (smallCnt U (m * s) b : ℝ)
+  have hC : (∑ b ∈ R, σ b) = 0 := by
+    simpa [R, σ] using b2_jacobi_cls_sum_zero m s a hm hs hodd hsquare hcop
+  have hσ : ∀ b ∈ R, |σ b| ≤ 1 := by
+    intro b hb
+    simpa [σ] using abs_jac_le (b : ℤ) s
+  have hAP' : ∀ b ∈ R, |H b - main| ≤ E := by
+    intro b hb
+    exact hAP b (by simpa [R] using hb)
+  have hCount : ∀ b ∈ R, N b = H b - T b := by
+    intro b hb
+    have ht := cnt_add_small m s a U b (by simpa [R] using hb)
+    have htr : N b + T b = H b := by
+      dsimp [N, H, T]
+      exact_mod_cast ht
+    linarith
+  have hSum : (∑ q ∈ PPset m a U, (jacobiSym (q : ℤ) s : ℝ)) =
+      ∑ b ∈ R, σ b * (H b - T b) := by
+    calc
+      _ = ∑ b ∈ R, σ b * N b := by
+        simpa [R, σ, N] using
+          (sum_jacobiSym_eq_sum_residueClass m s a U hm (by omega))
+      _ = _ := by
+        apply Finset.sum_congr rfl
+        intro b hb
+        rw [hCount b hb]
+  have hTop : |∑ b ∈ R, σ b * H b| ≤ (R.card : ℝ) * E := by
+    have heq : (∑ b ∈ R, σ b * H b) =
+        ∑ b ∈ R, σ b * (H b - main) := by
+      calc
+        _ = (∑ b ∈ R, σ b * (H b - main)) +
+            main * (∑ b ∈ R, σ b) := by
+              rw [mul_comm main (∑ b ∈ R, σ b), Finset.sum_mul]
+              rw [← Finset.sum_add_distrib]
+              apply Finset.sum_congr rfl
+              intro b hb
+              ring
+        _ = _ := by simp [hC]
+    rw [heq]
+    calc
+      |∑ b ∈ R, σ b * (H b - main)| ≤
+          ∑ b ∈ R, |σ b * (H b - main)| :=
+            Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ b ∈ R, E := by
+          apply Finset.sum_le_sum
+          intro b hb
+          rw [abs_mul]
+          calc
+            |σ b| * |H b - main| ≤ 1 * E := by
+              exact mul_le_mul (hσ b hb) (hAP' b hb)
+                (abs_nonneg _) (by norm_num)
+            _ = E := by ring
+      _ = (R.card : ℝ) * E := by simp
+  have hT0 : ∀ b : ℕ, 0 ≤ T b := by
+    intro b
+    dsimp [T]
+    positivity
+  have hLow : |∑ b ∈ R, σ b * T b| ≤ U ^ (1 / 2 : ℝ) := by
+    calc
+      |∑ b ∈ R, σ b * T b| ≤
+          ∑ b ∈ R, |σ b * T b| :=
+            Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ b ∈ R, T b := by
+          apply Finset.sum_le_sum
+          intro b hb
+          rw [abs_mul, abs_of_nonneg (hT0 b)]
+          nlinarith [hσ b hb, hT0 b]
+      _ ≤ U ^ (1 / 2 : ℝ) := by
+          simpa [R, T] using sum_small_le m s a U hU
+  have hSub : (∑ b ∈ R, σ b * (H b - T b)) =
+      (∑ b ∈ R, σ b * H b) -
+      (∑ b ∈ R, σ b * T b) := by
+    rw [← Finset.sum_sub_distrib]
+    apply Finset.sum_congr rfl
+    intro b hb
+    ring
+  have hCard : R.card = s.totient := by
+    exact card_cls m s a hcop.symm hm.ne' (by omega)
+  calc
+    |∑ q ∈ PPset m a U, (jacobiSym (q : ℤ) s : ℝ)| =
+        |∑ b ∈ R, σ b * (H b - T b)| := by rw [hSum]
+    _ = |(∑ b ∈ R, σ b * H b) -
+          (∑ b ∈ R, σ b * T b)| := by rw [hSub]
+    _ ≤ |∑ b ∈ R, σ b * H b| +
+          |∑ b ∈ R, σ b * T b| := by
+            simpa using (abs_sub_le (∑ b ∈ R, σ b * H b)
+              0 (∑ b ∈ R, σ b * T b))
+    _ ≤ (R.card : ℝ) * E + U ^ (1 / 2 : ℝ) :=
+          add_le_add hTop hLow
+    _ = (s.totient : ℝ) * E + U ^ (1 / 2 : ℝ) := by rw [hCard]
+
+#print axioms Formalism.HermitianLattices.Ext.LogarithmicIntegralBounds.b2_jacobi_bound_of_uniform_AP
+
+
 end Formalism.HermitianLattices.Ext.LogarithmicIntegralBounds
