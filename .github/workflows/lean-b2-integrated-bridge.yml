@@ -1,0 +1,79 @@
+name: "B2 - integrated 7/8 PNT to Jacobi in Alpoge Lean"
+on:
+  push:
+    paths:
+      - "B2IntegratedBridge.lean"
+      - ".github/workflows/lean-b2-integrated-bridge.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  b2-integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Checkout verification source
+        uses: actions/checkout@v4
+        with:
+          path: bridge
+      - name: Checkout pinned Alpoge source
+        uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            lean-toolchain
+            lakefile.toml
+            lake-manifest.json
+            src
+      - name: Install elan
+        working-directory: alpoge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Add proof files as Development modules in isolated Alpoge clone
+        run: |
+          mkdir -p alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2JacobiClassZero.lean alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds/
+          cp bridge/B2NoExceptional.lean alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds/
+          cp bridge/B2IntegratedBridge.lean alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds/
+      - name: Resolve Alpoge mathlib
+        working-directory: alpoge
+        run: lake update
+      - name: Download mathlib cache
+        working-directory: alpoge
+        run: lake exe cache get
+      - name: Restore Alpoge checkpoint
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            alpoge-b2-0df444-${{ runner.os }}-
+      - name: Compile integrated bridge and its Alpoge imports
+        id: proof
+        timeout-minutes: 290
+        working-directory: alpoge
+        run: lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2IntegratedBridge
+      - name: Show theorem axioms
+        if: ${{ success() }}
+        working-directory: alpoge
+        run: lake env lean src/Development/AutomorphicArithmetic/MeanSquareBounds/B2IntegratedBridge.lean
+      - name: Save cached builds
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+      - name: Report final compile status
+        if: ${{ always() }}
+        env:
+          PROOF: ${{ steps.proof.outcome }}
+        run: echo "Integrated bridge kernel: $PROOF"
