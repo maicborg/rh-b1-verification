@@ -121,4 +121,57 @@ theorem crt_product_cancellation
 
 #print axioms BorghettiRH.crt_product_cancellation
 
+
+/--
+One-endpoint AP transfer. Unlike `ap_interval_error_to_correlation`,
+this requires AP only at the upper endpoint. The lower-endpoint
+contribution is bounded by the TOTAL number of lower primes, not by
+an AP estimate for each residue class.
+
+`hLowCount` is an elementary counting obligation to be discharged
+from the definition of PPset; it is NOT a second AP hypothesis.
+-/
+theorem ap_one_endpoint_interval
+    {α : Type*} [DecidableEq α]
+    (R : Finset α) (sigma hi lo : α → ℝ)
+    (main E L : ℝ)
+    (hcancel : (∑ r ∈ R, sigma r) = 0)
+    (hsigma : ∀ r ∈ R, |sigma r| ≤ 1)
+    (hAP : ∀ r ∈ R, |hi r - main| ≤ E)
+    (hE : 0 ≤ E)
+    (hlo : ∀ r ∈ R, 0 ≤ lo r)
+    (hLowCount : (∑ r ∈ R, lo r) ≤ L) :
+    |∑ r ∈ R, sigma r * (hi r - lo r)| ≤
+      (R.card : ℝ) * E + L := by
+  classical
+  have hupper := ap_error_to_weighted_correlation R sigma hi main E
+    hcancel hsigma hAP hE
+  have hlower : |∑ r ∈ R, sigma r * lo r| ≤ L := by
+    calc
+      |∑ r ∈ R, sigma r * lo r| ≤
+          ∑ r ∈ R, |sigma r * lo r| := Finset.abs_sum_le_sum_abs _ _
+      _ ≤ ∑ r ∈ R, lo r := by
+        apply Finset.sum_le_sum
+        intro r hr
+        rw [abs_mul, abs_of_nonneg (hlo r hr)]
+        nlinarith [hsigma r hr, hlo r hr]
+      _ ≤ L := hLowCount
+  have hid : (∑ r ∈ R, sigma r * (hi r - lo r)) =
+      (∑ r ∈ R, sigma r * hi r) -
+        (∑ r ∈ R, sigma r * lo r) := by
+    rw [← Finset.sum_sub_distrib]
+    apply Finset.sum_congr rfl
+    intro r hr
+    ring
+  rw [hid]
+  calc
+    |(∑ r ∈ R, sigma r * hi r) - (∑ r ∈ R, sigma r * lo r)| ≤
+        |∑ r ∈ R, sigma r * hi r| +
+          |∑ r ∈ R, sigma r * lo r| := by
+            simpa using (abs_sub_le (∑ r ∈ R, sigma r * hi r)
+              0 (∑ r ∈ R, sigma r * lo r))
+    _ ≤ (R.card : ℝ) * E + L := add_le_add hupper hlower
+
+#print axioms BorghettiRH.ap_one_endpoint_interval
+
 end BorghettiRH
