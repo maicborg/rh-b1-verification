@@ -7,6 +7,7 @@ Uses Alpoge previously proved existence of nonresidue and sum permutation,
 but not twistK or its proof.
 -/
 open Finset Classical
+open Formalism.HermitianLattices.ZeroFreeRegionGL2
 noncomputable section
 namespace Formalism.HermitianLattices.Ext.LogarithmicIntegralBounds
 
