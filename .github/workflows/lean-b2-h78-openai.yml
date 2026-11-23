@@ -1,0 +1,61 @@
+name: "B2 - actual OpenAI 7/8 h78 proof (pinned OAI toolchain)"
+on:
+  push:
+    paths:
+      - 'B2H78OpenAI.lean'
+      - '.github/workflows/lean-b2-h78-openai.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-h78:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - run: cp bridge/B2H78OpenAI.lean upstream/lean/B2H78OpenAI.lean
+      - name: Install elan
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve pinned dependencies
+        working-directory: upstream/lean
+        run: lake update
+      - name: Mathlib cache
+        working-directory: upstream/lean
+        run: lake exe cache get
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            upstream/lean/.lake/build
+            upstream/lean/.lake/packages/*/.lake/build
+          key: oai4341-4eaee875-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            oai4341-4eaee875-${{ runner.os }}-
+      - name: Build actual OAI theorem
+        working-directory: upstream/lean
+        timeout-minutes: 300
+        run: lake build OAI.NumberTheory.DirichletL.Nonvanishing
+      - name: Kernel check actual h78 and axioms
+        working-directory: upstream/lean
+        run: |
+          lake env lean B2H78OpenAI.lean 2>&1 | tee /tmp/b2-h78.log
+          if grep -E 'sorryAx|\baxiom\b' /tmp/b2-h78.log; then exit 1; fi
+      - uses: actions/cache/save@v4
+        if: ${{ always() }}
+        continue-on-error: true
+        with:
+          path: |
+            upstream/lean/.lake/build
+            upstream/lean/.lake/packages/*/.lake/build
+          key: oai4341-4eaee875-${{ runner.os }}-${{ github.run_id }}
