@@ -76,4 +76,5 @@ jobs:
         if: ${{ always() }}
         env:
           PROOF: ${{ steps.proof.outcome }}
-        run: echo "Integrated bridge kernel: $PROOF"
+        run: |
+          echo "Integrated bridge kernel: $PROOF"
