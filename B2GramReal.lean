@@ -62,18 +62,20 @@ theorem gram_complex_split
       (∑ q ∈ P, (∑ i ∈ I, (b i).re * sign i q) ^ 2) +
       (∑ q ∈ P, (∑ i ∈ I, (b i).im * sign i q) ^ 2) := by
   classical
-  have hre (q : κ) :
-      (∑ i ∈ I, b i * (sign i q : ℂ)).re =
-        ∑ i ∈ I, (b i).re * sign i q := by
-    induction I using Finset.induction_on with
+  have hre : ∀ (J : Finset ι) (q : κ),
+      (∑ i ∈ J, b i * (sign i q : ℂ)).re =
+        ∑ i ∈ J, (b i).re * sign i q := by
+    intro J q
+    induction J using Finset.induction_on with
     | empty => simp
     | @insert i T hi ih =>
         simp only [Finset.sum_insert hi, Complex.add_re, Complex.mul_re,
           Complex.ofReal_re, Complex.ofReal_im, mul_zero, sub_zero, ih]
-  have him (q : κ) :
-      (∑ i ∈ I, b i * (sign i q : ℂ)).im =
-        ∑ i ∈ I, (b i).im * sign i q := by
-    induction I using Finset.induction_on with
+  have him : ∀ (J : Finset ι) (q : κ),
+      (∑ i ∈ J, b i * (sign i q : ℂ)).im =
+        ∑ i ∈ J, (b i).im * sign i q := by
+    intro J q
+    induction J using Finset.induction_on with
     | empty => simp
     | @insert i T hi ih =>
         simp only [Finset.sum_insert hi, Complex.add_im, Complex.mul_im,
@@ -84,12 +86,13 @@ theorem gram_complex_split
         (∑ i ∈ I, b i * (sign i q : ℂ)).im ^ 2) := by
           apply Finset.sum_congr rfl
           intro q hq
-          exact Complex.sq_norm _
+          rw [Complex.sq_norm, Complex.normSq_apply]
+          ring
     _ = ∑ q ∈ P, ((∑ i ∈ I, (b i).re * sign i q) ^ 2 +
           (∑ i ∈ I, (b i).im * sign i q) ^ 2) := by
           apply Finset.sum_congr rfl
           intro q hq
-          rw [hre q, him q]
+          rw [hre I q, him I q]
     _ = _ := Finset.sum_add_distrib
 
 #print axioms BorghettiRH.gram_complex_split
