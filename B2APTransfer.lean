@@ -174,4 +174,24 @@ theorem ap_one_endpoint_interval
 
 #print axioms BorghettiRH.ap_one_endpoint_interval
 
+
+/--
+A one-endpoint lower bound for a prime interval.  The sole analytic
+hypothesis is the AP estimate at the upper endpoint; the lower
+endpoint is bounded by an elementary counting estimate.
+
+The statement deliberately keeps the main term and error symbolic,
+so it does not silently import OpenAI's quantitative corollary.
+-/
+theorem ap_one_endpoint_lower
+    (hi lo main E L T : ℝ)
+    (hAP : |hi - main| ≤ E)
+    (hLow : lo ≤ L)
+    (hMain : T + E + L ≤ main) :
+    T ≤ hi - lo := by
+  have h := (abs_le.mp hAP).1
+  linarith
+
+#print axioms BorghettiRH.ap_one_endpoint_lower
+
 end BorghettiRH
