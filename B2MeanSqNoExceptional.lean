@@ -49,7 +49,7 @@ theorem b2_meanSq_abs_without_exception :
       (∀ s : ℕ, 1 < s → Odd s → Squarefree s → s.Coprime m₀ →
         s ≤ ⌊Z⌋₊ ^ 2 →
         |∑ q ∈ P, (jacobiSym (q : ℤ) s : ℝ)| ≤ η * P.card) →
-      ∑ q ∈ P, ‖S Z y q κ‖ ^ 2 ≤
+      ∑ q ∈ P, ‖QH.S Z y q κ‖ ^ 2 ≤
         ((∑ p ∈ (Icc 1 ⌊Z⌋₊).filter Nat.Prime, sP (cN y) ⌊Z⌋₊ p ^ 2) +
           RR (cN y) m₀ ⌊Z⌋₊ ^ 2 +
           η * (∑ n ∈ Icc 1 ⌊Z⌋₊, cN y n) ^ 2) * P.card := by
@@ -74,8 +74,8 @@ theorem b2_meanSq_abs_without_exception :
   have hno2 : ∀ n ∈ Icc 1 N, ∀ n' ∈ Icc 1 N,
       soutPart m₀ (n * n') ≠ 2 := by
     intro n hn n' hn'
-    have hodd : Odd (soutPart m₀ (n * n')) :=
-      soutPart_odd m₀ _ (dvd_trans (by norm_num) h8)
+    obtain ⟨k, hk⟩ :=
+      soutPart_odd m₀ (n * n') (dvd_trans (by norm_num) h8)
     omega
   have hsplit := b2_meansq_split_without_exception (Icc 1 N)
     (cN y) hc0 (fun n n' => soutPart m₀ (n * n'))
