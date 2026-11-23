@@ -1,0 +1,18 @@
+name: Lean B2 RH-S log budget
+on:
+  push:
+    paths:
+      - 'B2ThresholdSplitRHS.lean'
+      - '.github/workflows/lean-b2-rhs-budget.yml'
+  workflow_dispatch:
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          build: false
+      - run: lake env lean B2ThresholdSplitRHS.lean
