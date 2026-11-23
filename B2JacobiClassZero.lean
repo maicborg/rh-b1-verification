@@ -34,7 +34,7 @@ theorem b2_jacobi_cls_sum_zero
   let R := clsB m s a
   have hS : ∀ b ∈ R, b < m * s := by
     intro b hb
-    exact Finset.mem_range.mp (Finset.mem_filter.mp hb).1
+    exact Finset.mem_range.mp ((Finset.mem_filter.mp hb).1)
   have hmap : ∀ b ∈ R, (u * b) % (m * s) ∈ R := by
     intro b hb
     obtain ⟨hbRange, hbmod, hbc⟩ :
@@ -79,7 +79,7 @@ theorem b2_jacobi_cls_sum_zero
     calc
       _ = ∑ b ∈ R, -(jacobiSym (b : ℤ) s : ℝ) :=
         Finset.sum_congr rfl hflip
-      _ = _ := by rw [Finset.sum_neg_distrib]
+      _ = _ := by simp only [Finset.sum_neg_distrib]
   have hzero : (∑ b ∈ R, (jacobiSym (b : ℤ) s : ℝ)) =
       -(∑ b ∈ R, (jacobiSym (b : ℤ) s : ℝ)) :=
     hsum.trans hflip_sum
