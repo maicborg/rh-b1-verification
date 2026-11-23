@@ -1,0 +1,75 @@
+name: "B2 - uniform exponential decay from actual admitted"
+on:
+  push:
+    paths:
+      - 'B2ExponentFromAdmitted.lean'
+      - '.github/workflows/lean-b2-exponent-admitted.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            lean-toolchain
+            lakefile.toml
+            lake-manifest.json
+            src
+      - name: Install elan
+        working-directory: alpoge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Copy independent modules
+        run: |
+          mkdir -p alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds
+          for f in B2JacobiEnvelopeV2 B2ExponentFromAdmitted; do
+            cp bridge/$f.lean alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds/
+          done
+      - name: Resolve dependencies
+        working-directory: alpoge
+        run: |
+          lake update
+          lake exe cache get
+      - name: Restore checkpoint
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            alpoge-b2-0df444-${{ runner.os }}-
+      - name: Build uniform decay
+        working-directory: alpoge
+        timeout-minutes: 290
+        run: lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2ExponentFromAdmitted
+      - name: Print axioms
+        working-directory: alpoge
+        run: |
+          set -o pipefail
+          lake env lean src/Development/AutomorphicArithmetic/MeanSquareBounds/B2ExponentFromAdmitted.lean 2>&1 | tee /tmp/b2-exp-admitted.log
+          if grep -q sorryAx /tmp/b2-exp-admitted.log; then exit 1; fi
+      - name: Reject placeholders
+        run: |
+          if grep -nE '\b(sorry|admit|axiom)\b' bridge/B2ExponentFromAdmitted.lean; then exit 1; fi
+      - name: Save checkpoint
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
