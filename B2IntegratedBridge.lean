@@ -64,7 +64,10 @@ theorem b2_jacobi_bound_via_no_exception_pnt
       rw [Nat.ModEq.gcd_eq (show b ≡ a [MOD m] from hm0)]
       exact ha
     have hbM : b.Coprime (m * s) := Nat.Coprime.mul_right hbm hbs
-    have h := hAP (m * s) h8ms U b hU hlog hbM
+    have hlog' : C₀ * Real.log ((m * s : ℕ) : ℝ) *
+        Real.log (Real.log ((m * s : ℕ) : ℝ) + 2) ≤ Real.log U := by
+      simpa only [Nat.cast_mul] using hlog
+    have h := hAP (m * s) h8ms U b hU hlog' hbM
     calc
       |(piAP U (m * s) b : ℝ) - main| ≤
         A₀ * D * main := by simpa [main, D] using h
