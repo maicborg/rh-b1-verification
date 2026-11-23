@@ -1,0 +1,72 @@
+name: "B2 - original PPset one endpoint count bound"
+on:
+  push:
+    paths:
+      - "B2PrimeSetOneEndpoint.lean"
+      - ".github/workflows/lean-b2-prime-set-one-endpoint.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pp-lower:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: |
+            lean-toolchain
+            lakefile.toml
+            lake-manifest.json
+            src
+      - name: Install Lean
+        working-directory: alpoge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Copy lemma
+        run: |
+          mkdir -p alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2PrimeSetOneEndpoint.lean alpoge/src/Development/AutomorphicArithmetic/MeanSquareBounds/
+      - name: Resolve toolchain and dependencies
+        working-directory: alpoge
+        run: |
+          lake update
+          lake exe cache get
+      - name: Restore checkpoint
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            alpoge-b2-0df444-${{ runner.os }}-
+      - name: Compile the exact original PPset bound
+        working-directory: alpoge
+        run: lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2PrimeSetOneEndpoint
+      - name: Check axioms
+        working-directory: alpoge
+        run: |
+          set -o pipefail
+          lake env lean src/Development/AutomorphicArithmetic/MeanSquareBounds/B2PrimeSetOneEndpoint.lean 2>&1 | tee /tmp/b2-pp-lower.log
+          if grep -q 'sorryAx' /tmp/b2-pp-lower.log; then exit 1; fi
+      - name: No placeholders
+        run: |
+          if grep -nE '\b(sorry|admit|axiom)\b' bridge/B2PrimeSetOneEndpoint.lean; then exit 1; fi
+      - name: Cache
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            alpoge/.lake/build
+            alpoge/.lake/packages/*/.lake/build
+          key: alpoge-b2-0df444-${{ runner.os }}-${{ github.run_id }}
