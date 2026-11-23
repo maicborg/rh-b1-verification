@@ -39,10 +39,10 @@ theorem b2_ppset_lower_one_endpoint
   have hsmall : (smallCnt U m b : ℝ) ≤ U ^ (1 / 2 : ℝ) := by
     have hterm : (smallCnt U (m * 1) b : ℝ) ≤
         ∑ z ∈ clsB m 1 a, (smallCnt U (m * 1) z : ℝ) := by
-      apply Finset.single_le_sum
-      · intro z hz
-        positivity
-      · exact hb
+      exact Finset.single_le_sum
+        (f := fun z : ℕ => (smallCnt U (m * 1) z : ℝ))
+        (s := clsB m 1 a)
+        (fun z hz => Nat.cast_nonneg _) hb
     have hsum := sum_small_le m 1 a U hU
     simpa only [Nat.mul_one] using hterm.trans hsum
   have hcnt : ((PPset m a U).card : ℝ) + (smallCnt U m b : ℝ) =
