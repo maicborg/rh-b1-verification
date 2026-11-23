@@ -1,0 +1,33 @@
+name: "B2 RH1.1 single-endpoint algebra kernel"
+on:
+  push:
+    paths:
+      - "B2SingleEndpointRatioRH11.lean"
+      - ".github/workflows/b2-rh11-ratio.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ratio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Get Mathlib cache and kernel check
+        working-directory: alpoge
+        run: |
+          lake update
+          lake exe cache get
+          cp ../bridge/B2SingleEndpointRatioRH11.lean .
+          lake env lean B2SingleEndpointRatioRH11.lean
