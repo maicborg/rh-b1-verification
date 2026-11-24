@@ -1,0 +1,124 @@
+name: RH Assembly V2 | targeted Lean
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths:
+      - RHAssemblyV2.lean
+      - .github/workflows/rh-assembly-v2.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rh-assembly-v2
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 45
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rh-assembly-v2-4341-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-
+            b2-incremental-lean4341-${{ runner.os }}-
+      - name: Build only three imported targets
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h .
+          time lake build Formalism.GL3MeanSquares.HookFormulaTorsion.WeightedVonMangoldtSumIdentity Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow Formalism.GammaFactorNonvanishing.RhOfRight 2>&1 | tee ../../bridge/assembly-logs/imports.log
+      - name: Kernel check V2 and audit all four declarations
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake env lean RHAssemblyV2.lean 2>&1 | tee ../../bridge/assembly-logs/v2.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path("../../bridge/assembly-logs/v2.log").read_text()
+          expected = ["finite_transfer", "finite_transfer_bound", "zetaFamily_Gm", "rh_of_zeta_windows"]
+          allowed = {"propext", "Classical.choice", "Quot.sound"}
+          for name in expected:
+              pattern = r"BorghettiRH\." + name + r"' depends on axioms:\s*\[([^\]]*)\]"
+              m = re.search(pattern, log)
+              if not m:
+                  raise SystemExit("Missing axiom report for " + name)
+              axioms = {a.strip() for a in m.group(1).split(",") if a.strip()}
+              if not axioms <= allowed:
+                  raise SystemExit(f"Unexpected axioms in {name}: {axioms}")
+              print("VERIFIED", name, sorted(axioms))
+          if "sorryAx" in log:
+              raise SystemExit("sorryAx detected")
+          PY
+      - name: Save compiled modules even after failure
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: upstream/lean/.lake/build
+          key: rh-assembly-v2-4341-${{ runner.os }}-${{ github.run_id }}
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rh-assembly-v2-${{ github.run_id }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
+          retention-days: 14
