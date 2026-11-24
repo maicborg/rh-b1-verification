@@ -17,15 +17,13 @@ noncomputable section
 namespace QH
 
 theorem b2_jacobi_list_product (q : ℕ) (ps : List ℕ) :
-    (ps.map (fun p => jacobiSym (p : ℤ) q)).prod =
+    (@List.map ℕ ℤ (fun p : ℕ => jacobiSym (Int.ofNat p) q) ps).prod =
       jacobiSym (ps.prod : ℤ) q := by
   induction ps with
   | nil => simp [jacobiSym.one_left]
   | cons p ps ih =>
-    change jacobiSym (p : ℤ) q *
-      (ps.map (fun r : ℕ => jacobiSym (r : ℤ) q)).prod =
-      jacobiSym ((p * ps.prod : ℕ) : ℤ) q
-    rw [ih, Nat.cast_mul, jacobiSym.mul_left]
+    simp only [List.map_cons, List.prod_cons, Nat.cast_mul,
+      jacobiSym.mul_left, ih]
 
 theorem b2_jacobi_product_average :
     ∀ ε A B : ℝ, 0 < ε → 0 < A → 0 < B →
@@ -36,7 +34,7 @@ theorem b2_jacobi_product_average :
         1 < soutPart m ps.prod →
         (soutPart m ps.prod : ℝ) ≤ Y ^ A →
         |∑ q ∈ PPset m a U,
-          ((ps.map (fun p => jacobiSym (p : ℤ) q)).prod : ℝ)| ≤
+          ((@List.map ℕ ℤ (fun p : ℕ => jacobiSym (Int.ofNat p) q) ps).prod : ℝ)| ≤
           Y ^ (-B) * ((PPset m a U).card : ℝ) := by
   intro ε A B hε hA hB
   obtain ⟨Y₀, hY₀⟩ := b2_jacobi_pair_average_of_twistK_v1 ε A B hε hA hB
