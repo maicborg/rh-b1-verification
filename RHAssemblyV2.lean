@@ -52,8 +52,14 @@ theorem zetaFamily_Gm (y : ℝ) : Deduction.Gm zetaFamily y = Deduction.G y := b
   have hone : ∀ n : ℕ, (1 : DirichletCharacter ℂ 1) (n : ZMod 1) = 1 := by
     intro n
     rw [Subsingleton.elim (n : ZMod 1) 1, map_one]
-  simp [Deduction.Gm, zetaFamily, Deduction.Gchi, Deduction.G, hone,
-    Complex.sub_re, Complex.add_re, Complex.ofReal_re]
+  change (∑ _ : Unit, (1 : ℝ) *
+    (Deduction.Gchi (1 : DirichletCharacter ℂ 1) y).re) = Deduction.G y
+  rw [Fintype.sum_unique, one_mul]
+  have he : (fun n : ℕ => (1 : DirichletCharacter ℂ 1) (n : ZMod 1)) =
+      (fun _ : ℕ => (1 : ℂ)) := funext hone
+  unfold Deduction.Gchi Deduction.G
+  rw [if_pos rfl, he]
+  simp only [Complex.sub_re, Complex.add_re, Complex.ofReal_re]
 
 /-- The final RH interface contains only a bound on the genuine zeta
 ramp on arbitrarily late windows. This is a conditional reduction.
