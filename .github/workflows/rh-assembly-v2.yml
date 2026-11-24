@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: rh-assembly-v2
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -51,6 +51,8 @@ jobs:
           lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
           lean_lib Supplements where globs := #[`Supplements.+]
           EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
           python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
           mkdir -p bridge/assembly-logs
           cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
