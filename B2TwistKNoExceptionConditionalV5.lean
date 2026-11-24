@@ -3,6 +3,7 @@ import Development.AutomorphicArithmetic.MeanSquareBounds.B2UniformPNTFromAdmitt
 import Development.AutomorphicArithmetic.MeanSquareBounds.B2ExponentFromAdmittedV4
 import Development.AutomorphicArithmetic.MeanSquareBounds.B2LowEndpointDecayV2
 import Development.AutomorphicArithmetic.MeanSquareBounds.B2AdmittedLogModulusV3
+import Development.AutomorphicArithmetic.MeanSquareBounds.B2RealPNT
 
 /-!
 An attempted COMPLETE alternate QH.twistK proof conditional ONLY on
@@ -141,4 +142,20 @@ theorem b2_twistK_no_exception_of_seven_eighths_v5
     simp [hEmpty]
 
 #print axioms QH.b2_twistK_no_exception_of_seven_eighths_v5
+
+/-! Original-signature replacement, independently instantiated from the real
+    pinned OAI 7/8 theorem. Do not import the original Alpoge twistK module. -/
+set_option maxHeartbeats 2000000 in
+theorem twistK :
+    ∀ ε A B : ℝ, 0 < ε → 0 < A → 0 < B →
+      ∃ Y₀ : ℝ, ∀ Y ≥ Y₀, ∀ (U : ℝ) (m₀ a₀ : ℕ),
+        admitted ε Y U m₀ a₀ →
+        ∃ nstar : ℕ, ∀ s : ℕ, 1 < s → Odd s → Squarefree s →
+          s.Coprime m₀ → (s : ℝ) ≤ Y ^ A → s ≠ nstar →
+          |∑ q ∈ PPset m₀ a₀ U, (jacobiSym (q : ℤ) s : ℝ)| ≤
+            Y ^ (-B) * ((PPset m₀ a₀ U).card : ℝ) := by
+  exact b2_twistK_no_exception_of_seven_eighths_v5
+    BorghettiRH.b2_actual_h78
+
+#print axioms QH.twistK
 end QH
