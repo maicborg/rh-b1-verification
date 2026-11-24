@@ -107,7 +107,7 @@ theorem prefix_tree_bound (d : ℕ) (f : ℕ → ℝ) (k : ℕ)
 /-- One possibly uncontrolled unordered pair costs at most one diagonal budget. -/
 theorem exceptional_pair_absorb (a b D E : ℝ)
     (h : a^2+b^2 ≤ D) :
-    D+E+2*|a|*|b| ≤ 2*D+E := by
+    D + E + 2 * |a| * |b| ≤ 2 * D + E := by
   have hs := sq_nonneg (|a|-|b|)
   nlinarith [sq_abs a, sq_abs b]
 
