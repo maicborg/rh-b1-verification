@@ -47,7 +47,7 @@ BRIDGES = [
     "B2AdmittedLogModulusV3", "B2PNTThresholdFromBudget",
     "B2UniformPNTFromAdmittedV4", "B2JacobiEnvelopeV3",
     "B2ExponentFromAdmittedV4", "B2LowEndpointDecayV2",
-    "B2TwistKNoExceptionConditionalV5", "B2TwistKAllOddV6", "B2JacobiPairCorrelationV1", "B2IntervalSecondMomentV1", "B2IntervalPrimepowersBudgetV1", "B2RealPNT",
+    "B2TwistKNoExceptionConditionalV5", "B2TwistKAllOddV6", "B2JacobiPairCorrelationV1", "B2IntervalSecondMomentV1", "B2IntervalPrimepowersBudgetV1", "B2IntervalLocalEnergyV1", "B2RealPNT",
 ]
 
 def one(text: str, before: str, after: str, n: int, path: str) -> str:
