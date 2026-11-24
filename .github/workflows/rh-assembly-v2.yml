@@ -67,13 +67,31 @@ jobs:
           PY
           python3 - <<'PY'
           from pathlib import Path
-          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1],["Formalism/GaloisCohomology/Statement.lean","def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=\n  PTCase F l →\n    Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸\n        LinearMap.range (localH2 D e)) =\n      Module.length ℤ_[l] (H0 (qzTw D e))","private def ptCokerLengthCompat {R M N : Type*} [Ring R] [AddCommGroup M] [Module R M]\n    [AddCommGroup N] [Module R N] (f : M →ₗ[R] N) : ℕ∞ :=\n  Module.length R (N ⧸ LinearMap.range f)\n\ndef PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=\n  PTCase F l →\n    @ptCokerLengthCompat _ _ _ _ _ _ _ _ (localH2 D e) =\n      Module.length ℤ_[l] (H0 (qzTw D e))",1]]:
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
               p = Path('upstream/lean') / rel
               s = p.read_text(encoding='utf-8')
               if s.count(old) != count:
                   raise SystemExit('Unexpected pinned compatibility block: ' + rel)
               p.write_text(s.replace(old, new), encoding='utf-8')
               print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
           PY
           mkdir -p bridge/assembly-logs
           cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
@@ -130,13 +148,13 @@ jobs:
           if "sorryAx" in log:
               raise SystemExit("sorryAx detected")
           PY
-      - name: Gate 2 | preflight compatibility repairs
+      - name: Gate 2 | preflight arithmetic PairGood only
         working-directory: upstream/lean
         timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          time lake build Formalism.TameInertiaTowers.StatementGroup ReciprocityTheory.GaloisValuations.GlobalB Formalism.GaloisCohomology.Statement 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
+          time lake build Development.AutomorphicArithmetic.CharacterBoxes.PairGood 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
       - name: Gate 2 | build pairEx using certified StagePow substitution
         working-directory: upstream/lean
         timeout-minutes: 115
