@@ -106,7 +106,7 @@ jobs:
           lean_lib Supplements where globs := #[`Supplements.+]
           EOF
           mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
-          for f in B2NoExceptional B2JacobiClassZero B2IntegratedBridge B2JacobiRelativeActual B2PrimeSetOneEndpoint B2SmallErrorBudget B2CountNoExceptionV1 B2CountRelativeActualV3 B2AdmittedLogModulusV3 B2PNTThresholdFromBudget B2UniformPNTFromAdmittedV4 B2JacobiEnvelopeV3 B2ExponentFromAdmittedV4 B2LowEndpointDecayV2 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 B2IntervalLocalEnergyV1 B2NoExceptionalLocalL2V1 B2RealPNT B2HighMomentUnionV1 B2HighMomentCoreV1 B2HighMomentBoundV1 B2JacobiProductCorrelationV1 B2HighMomentComplexV1 B2HighMomentActualV1 B2HighMomentLastMileV1; do
+          for f in B2NoExceptional B2JacobiClassZero B2IntegratedBridge B2JacobiRelativeActual B2PrimeSetOneEndpoint B2SmallErrorBudget B2CountNoExceptionV1 B2CountRelativeActualV3 B2AdmittedLogModulusV3 B2PNTThresholdFromBudget B2UniformPNTFromAdmittedV4 B2JacobiEnvelopeV3 B2ExponentFromAdmittedV4 B2LowEndpointDecayV2 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 B2IntervalLocalEnergyV1 B2NoExceptionalLocalL2V1 B2RealPNT B2HighMomentUnionV1 B2HighMomentCoreV1 B2HighMomentBoundV1 B2JacobiProductCorrelationV1 B2HighMomentComplexV1 B2HighMomentActualV1 B2HighMomentLastMileV1 B2AbelQuarticV1 B2PrimeSetMomentV1; do
             cp "bridge/$f.lean" upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
           done
           python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
@@ -135,8 +135,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentUnionV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentCoreV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentBoundV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentComplexV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentLastMileV1 2>&1 | tee ../../bridge/b2-logs/b23-finite.log
-          for file in B2HighMomentUnionV1 B2HighMomentCoreV1 B2HighMomentBoundV1 B2HighMomentComplexV1 B2HighMomentLastMileV1; do
+          lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentUnionV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentCoreV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentBoundV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentComplexV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentLastMileV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2AbelQuarticV1 2>&1 | tee ../../bridge/b2-logs/b23-finite.log
+          for file in B2HighMomentUnionV1 B2HighMomentCoreV1 B2HighMomentBoundV1 B2HighMomentComplexV1 B2HighMomentLastMileV1 B2AbelQuarticV1; do
             lake env lean Development/AutomorphicArithmetic/MeanSquareBounds/$file.lean 2>&1 | tee "../../bridge/b2-logs/axioms-$file.log"
             if grep -q sorryAx "../../bridge/b2-logs/axioms-$file.log"; then
               echo "UNCERTIFIED: sorryAx in $file" >&2
@@ -181,8 +181,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2JacobiProductCorrelationV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentActualV1 2>&1 | tee ../../bridge/b2-logs/b23-jacobi.log
-          for file in B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2JacobiProductCorrelationV1 B2HighMomentActualV1; do
+          lake build Development.AutomorphicArithmetic.MeanSquareBounds.B2JacobiProductCorrelationV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2HighMomentActualV1 Development.AutomorphicArithmetic.MeanSquareBounds.B2PrimeSetMomentV1 2>&1 | tee ../../bridge/b2-logs/b23-jacobi.log
+          for file in B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2JacobiProductCorrelationV1 B2HighMomentActualV1 B2PrimeSetMomentV1; do
             lake env lean Development/AutomorphicArithmetic/MeanSquareBounds/$file.lean 2>&1 | tee "../../bridge/b2-logs/axioms-$file.log"
             if grep -q sorryAx "../../bridge/b2-logs/axioms-$file.log"; then
               echo "UNCERTIFIED: sorryAx in $file" >&2
