@@ -1,0 +1,216 @@
+name: RFH | singleton observable identity
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths:
+      - .github/workflows/rfh-singleton-observable.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-singleton-observable
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 45
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rh-assembly-v2-4341-${{ runner.os }}-integrated-45486329693
+          restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-
+            b2-incremental-lean4341-${{ runner.os }}-
+      - name: Build only three imported targets
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h .
+          time lake build Formalism.GL3MeanSquares.HookFormulaTorsion.WeightedVonMangoldtSumIdentity Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow Formalism.GammaFactorNonvanishing.RhOfRight 2>&1 | tee ../../bridge/assembly-logs/imports.log
+      - name: Kernel check V2 and audit all four declarations
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake env lean RHAssemblyV2.lean 2>&1 | tee ../../bridge/assembly-logs/v2.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path("../../bridge/assembly-logs/v2.log").read_text()
+          expected = ["finite_transfer", "finite_transfer_bound", "zetaFamily_Gm", "rh_of_zeta_windows"]
+          allowed = {"propext", "Classical.choice", "Quot.sound"}
+          for name in expected:
+              pattern = r"BorghettiRH\." + name + r"' depends on axioms:\s*\[([^\]]*)\]"
+              m = re.search(pattern, log)
+              if not m:
+                  raise SystemExit("Missing axiom report for " + name)
+              axioms = {a.strip() for a in m.group(1).split(",") if a.strip()}
+              if not axioms <= allowed:
+                  raise SystemExit(f"Unexpected axioms in {name}: {axioms}")
+              print("VERIFIED", name, sorted(axioms))
+          if "sorryAx" in log:
+              raise SystemExit("sorryAx detected")
+          PY
+      - name: Build exact observable identity imports
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.PrimitiveCosets.GzEq 2>&1 | tee ../../bridge/assembly-logs/singleton-import.log
+      - name: Certify singleton observable identity
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RFHSingleton.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.PrimitiveCosets.GzEq
+          import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions
+          noncomputable section
+          namespace BorghettiRH
+          open Formalism.HC
+
+          theorem singleton_kept : (Level.cyc PChar.one).KEPT = {PChar.one} := by
+            classical
+            ext ψ
+            simp only [Finset.mem_singleton]
+            constructor
+            · intro hp
+              change ψ ∈ (Level.ofSub (Subgroup.zpowers (1 : DirichletCharacter ℂ 1))).KEPT at hp
+              obtain ⟨χ, _, hχ⟩ := (Level.mem_ofSub _ _).mp hp
+              obtain rfl := DirichletCharacter.level_one χ
+              exact hχ.symm.trans (PChar.of_one 1)
+            · rintro rfl
+              exact Level.mem_cyc PChar.one
+
+          theorem singleton_Gm_eq (y : ℝ) :
+              (Level.cyc PChar.one).Gm y = Deduction.G y := by
+            classical
+            have h : (Level.cyc PChar.one).Nt = ∅ := by
+              simp [Level.Nt, singleton_kept]
+            rw [Level.Gm, h, Finset.sum_empty, add_zero]
+            exact (UpperTheory.Comparison₂.Gz_eq y).1.trans (UpperTheory.Comparison₂.Gz_eq y).2
+
+          #print axioms BorghettiRH.singleton_kept
+          #print axioms BorghettiRH.singleton_Gm_eq
+          end BorghettiRH
+          LEAN
+          lake env lean RFHSingleton.lean 2>&1 | tee ../../bridge/assembly-logs/singleton.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path("../../bridge/assembly-logs/singleton.log").read_text()
+          for name in ["singleton_kept", "singleton_Gm_eq"]:
+              m = re.search(r"BorghettiRH\." + name + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              if not m:
+                  raise SystemExit("Missing axiom report: " + name)
+              axioms = {a.strip() for a in m.group(1).split(",") if a.strip()}
+              if not axioms <= {"propext", "Classical.choice", "Quot.sound"}:
+                  raise SystemExit("Unexpected axioms: " + str(axioms))
+              print("VERIFIED", name, sorted(axioms))
+          if "sorryAx" in log:
+              raise SystemExit("sorryAx detected")
+          PY
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-singleton-${{ github.run_id }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
+          retention-days: 14
