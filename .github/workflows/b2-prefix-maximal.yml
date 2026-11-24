@@ -1,0 +1,45 @@
+name: "B2.2 | Finite prefix maximal verification"
+on:
+  push:
+    branches: [b2/prefix-maximal]
+    paths:
+      - "B2PrefixMaximal.lean"
+      - "B2PrefixMoment.lean"
+      - ".github/workflows/b2-prefix-maximal.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b2-prefix-maximal-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          auto-config: false
+          build: false
+          test: false
+          lint: false
+          use-mathlib-cache: true
+      - name: Compile maximal inequality and audit proof axioms
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .lake/build/lib/lean
+          lake env lean -o .lake/build/lib/lean/B2PrefixMaximal.olean B2PrefixMaximal.lean 2>&1 | tee b2-prefix.log
+          if [ -f B2PrefixMoment.lean ]; then
+            lake env lean B2PrefixMoment.lean 2>&1 | tee -a b2-prefix.log
+          fi
+          if grep -E 'sorryAx|declaration uses .sorry.' b2-prefix.log; then exit 1; fi
+          for name in prefix_tree_bound exceptional_pair_absorb prefix_selected_bound; do
+            grep -F "'BorghettiRH.$name' depends on axioms:" b2-prefix.log
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: b2-prefix-log
+          path: b2-prefix.log
