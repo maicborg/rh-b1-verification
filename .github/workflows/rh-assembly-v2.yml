@@ -124,7 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45486329693
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45489418752
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -320,10 +320,10 @@ jobs:
               i = 0
               while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
                   i += 1
-              compat = """local notation "rhCompatCoeff" => (fun m p => MvPolynomial.coeff p m)
+              compat = """local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
 
           private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
-            (m : σ →₀ ℕ) : MvPolynomial.coeff (0 : MvPolynomial σ R) m = 0 := by
+            (m : σ →₀ ℕ) : AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m = 0 := by
             simp
 
           """
@@ -380,7 +380,20 @@ jobs:
           edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
                "set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE",
                "set_option maxHeartbeats 8000000 in\nnoncomputable def eGamE", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm).trans\n    (QuotientGroup.quotientKerEquivOfSurjective _ (phiE_surj s))).trans\n    (MulEquiv.prodCongr (eQQ s) (MulEquiv.refl _))",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ := by\n  let e1 : GamE s ≃* (GalL (s + 2) ⧸ (phiE s).ker) :=\n    QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm\n  let e2 : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n    QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)\n  let e3 : (QQ s × ℤˣ × ℤˣ) ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n    MulEquiv.prodCongr (eQQ s) (MulEquiv.refl (ℤˣ × ℤˣ))\n  exact (e1.trans e2).trans e3", 1)
           PY
+          cat > RHGate3ACoeffProbe.lean <<'LEAN'
+          import Mathlib.Algebra.MvPolynomial.Basic
+          local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
+          example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) :
+              rhCompatCoeff m (0 : MvPolynomial σ R) = 0 := by simp
+          example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+              rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            rw [MvPolynomial.coeff_add]
+          LEAN
+          lake env lean RHGate3ACoeffProbe.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-probe.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
