@@ -57,7 +57,6 @@ theorem b23_discrete_abel (a w : ℕ → ℂ) (N : ℕ) :
   induction N with
   | zero => simp
   | succ N ih =>
-    simp only [Nat.succ_eq_add_one]
     rw [sum_range_succ (fun n => w n * a n) (N+1), ih,
         sum_range_succ a (N+1),
         sum_range_succ (fun n => (w n - w (n+1)) *
