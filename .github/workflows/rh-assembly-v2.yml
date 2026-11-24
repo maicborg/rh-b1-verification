@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +119,68 @@ jobs:
               print("VERIFIED", name, sorted(axioms))
           if "sorryAx" in log:
               raise SystemExit("sorryAx detected")
+          PY
+      - name: Gate 2 | build pairEx using certified StagePow substitution
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Development.AutomorphicArithmetic.MeanSquareBounds.pairEx 2>&1 | tee ../../bridge/assembly-logs/gate2-build.log
+      - name: Gate 2 | verify axiom whitelist and actual proof dependencies
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RHGate2Audit.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.MeanSquareBounds.pairEx
+          import Lean.Util.FoldConsts
+          open Lean Elab Command
+          
+          #print axioms QH.pairEx
+          #print axioms QH.stage
+          #print axioms QH.meanSqK
+          #print axioms QH.twistK
+          #print axioms BorghettiRH.b2_actual_h78
+          
+          run_cmd do
+            let env ← getEnv
+            let edges : List (Name × Name) := [
+              (``QH.pairEx, ``QH.pair_exists),
+              (``QH.pair_exists, ``QH.pair_share),
+              (``QH.pair_share, ``QH.stage1),
+              (``QH.pair_share, ``QH.stage2),
+              (``QH.stage1, ``QH.stage),
+              (``QH.stage2, ``QH.stage),
+              (``QH.stage, ``QH.meanSqK),
+              (``QH.meanSqK, ``QH.twistK),
+              (``QH.twistK, ``QH.b2_twistK_no_exception_of_seven_eighths_v5),
+              (``QH.twistK, ``BorghettiRH.b2_actual_h78),
+              (``BorghettiRH.b2_actual_h78, ``OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re)]
+            for (a, b) in edges do
+              let some ci := env.find? a | throwError m!"Missing declaration: {a}"
+              let some v := ci.value? | throwError m!"No proof term for {a}"
+              unless v.getUsedConstants.contains b do
+                throwError m!"Missing proof dependency: {a} -> {b}"
+              logInfo m!"VERIFIED_EDGE {a} -> {b}"
+          LEAN
+          lake env lean RHGate2Audit.lean 2>&1 | tee ../../bridge/assembly-logs/gate2-audit.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path('../../bridge/assembly-logs/gate2-audit.log').read_text()
+          expected = ['QH.pairEx', 'QH.stage', 'QH.meanSqK', 'QH.twistK', 'BorghettiRH.b2_actual_h78']
+          allowed = {'propext', 'Classical.choice', 'Quot.sound'}
+          for name in expected:
+              m = re.search(re.escape(name) + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              if not m:
+                  raise SystemExit('Missing axiom report: ' + name)
+              axioms = {x.strip() for x in m.group(1).split(',') if x.strip()}
+              if not axioms <= allowed:
+                  raise SystemExit(f'Unexpected axioms in {name}: {axioms}')
+              print('VERIFIED', name, sorted(axioms))
+          if 'sorryAx' in log or log.count('VERIFIED_EDGE') != 11:
+              raise SystemExit('Gate 2 audit incomplete')
           PY
       - name: Save compiled modules even after failure
         if: always()
