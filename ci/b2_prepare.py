@@ -43,7 +43,7 @@ STAGE = "Development/AutomorphicArithmetic/MeanSquareBounds/StagePow.lean"
 BRIDGES = [
     "B2NoExceptional", "B2JacobiClassZero", "B2IntegratedBridge",
     "B2JacobiRelativeActual", "B2PrimeSetOneEndpoint",
-    "B2SmallErrorBudget", "B2CountRelativeActualV3",
+    "B2SmallErrorBudget", "B2CountNoExceptionV1", "B2CountRelativeActualV3",
     "B2AdmittedLogModulusV3", "B2PNTThresholdFromBudget",
     "B2UniformPNTFromAdmittedV4", "B2JacobiEnvelopeV3",
     "B2ExponentFromAdmittedV4", "B2LowEndpointDecayV2",
