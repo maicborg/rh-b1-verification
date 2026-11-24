@@ -94,11 +94,9 @@ def prepare(root: Path, bridge: Path, mode: str) -> None:
 
     text = (root / MEAN).read_text(encoding="utf-8")
     new = one(text, "import Development.AutomorphicArithmetic.MeanSquareBounds.twistK",
-              "import Development.AutomorphicArithmetic.MeanSquareBounds.B2TwistKNoExceptionConditionalV5\n"
-              "import Development.AutomorphicArithmetic.MeanSquareBounds.B2RealPNT", 1, MEAN)
-    new = one(new, ":= twistK ε (800 * K) (K + 1)",
-              ":= b2_twistK_no_exception_of_seven_eighths_v5 "
-              "BorghettiRH.b2_actual_h78 ε (800 * K) (K + 1)", 1, MEAN)
+              "import Development.AutomorphicArithmetic.MeanSquareBounds.B2TwistKNoExceptionConditionalV5", 1, MEAN)
+    if new.count(":= twistK ε (800 * K) (K + 1)") != 1:
+        raise ValueError("meanSqK: original twistK call changed: G3 cannot be certified")
     changed[MEAN] = (text, new + "\n#print axioms QH.meanSqK\n")
 
     text = (root / STAGE).read_text(encoding="utf-8")
