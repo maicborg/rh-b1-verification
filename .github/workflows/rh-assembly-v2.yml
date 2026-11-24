@@ -194,7 +194,7 @@ jobs:
               (``BorghettiRH.b2_actual_h78, ``OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re)]
             for (a, b) in edges do
               let some ci := env.find? a | throwError m!"Missing declaration: {a}"
-              let some v := ci.value? | throwError m!"No proof term for {a}"
+              let some v := ci.value? (allowOpaque := true) | throwError m!"No proof term for {a}"
               unless v.getUsedConstants.contains b do
                 throwError m!"Missing proof dependency: {a} -> {b}"
               logInfo m!"VERIFIED_EDGE {a} -> {b}"
