@@ -58,9 +58,9 @@ theorem b2_absorb_local_quasiorthogonality
       add_le_add (mul_le_mul_of_nonneg_left hD (by norm_num)) ht1
     _ = 2 * (C * L ^ 2 * h) + (η * L ^ 2) * (h * h) := by ring
     _ ≤ 2 * (C * L ^ 2 * h) + (η * L ^ 2) * (N * h) :=
-      add_le_add_left ht2 _
+      add_le_add (le_refl _) ht2
     _ = 2 * (C * L ^ 2 * h) + ((η * L ^ 2) * N) * h := by ring
-    _ ≤ 2 * (C * L ^ 2 * h) + h := add_le_add_left ht3 _
+    _ ≤ 2 * (C * L ^ 2 * h) + h := add_le_add (le_refl _) ht3
     _ = (2 * C * L ^ 2 + 1) * h := by ring
 
 /-- Applies the quantitative error absorption to a finite family of
