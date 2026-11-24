@@ -42,7 +42,7 @@ theorem b2_sP_partition_primepowers (c : ℕ → ℝ) (N : ℕ)
           · have hpr : n.minFac.Prime := Nat.minFac_prime hpp.ne_one
             have hnN : n ≤ N := (Finset.mem_Icc.mp hn).2
             have hmn : n.minFac ≤ N :=
-              (Nat.minFac_le (by omega)).trans hnN
+              (Nat.minFac_le hpp.ne_one).trans hnN
             have hmem : n.minFac ∈ (Icc 1 N).filter Nat.Prime :=
               Finset.mem_filter.mpr ⟨Finset.mem_Icc.mpr
                 ⟨hpr.one_lt.le, hmn⟩, hpr⟩
@@ -65,7 +65,6 @@ theorem b2_local_energy_primes (c : ℕ → ℝ) (N : ℕ) (W : ℝ)
       intro p hp
       have hsp : 0 ≤ sP c N p :=
         Finset.sum_nonneg (fun n _ => hc n)
-      dsimp [sP] at hsp
       have hmax := hW p
       nlinarith [mul_nonneg hsp (sub_nonneg.mpr hmax)]
     _ = W * (∑ p ∈ (Icc 1 N).filter Nat.Prime, sP c N p) := by
@@ -118,8 +117,8 @@ theorem b2_interval_local_energy_801
     (∑ p ∈ (Icc 1 N).filter Nat.Prime, sP c N p ^ 2) ≤
       801 * Real.log x * L * (I.card : ℝ) := by
   have hsupp := b2_dominated_primepower_support x c hc hdom
-  have hW := b2_sP_upper_log x hx N
-    (by exact hN) c hdom
+  have hW : ∀ p, sP c N p ≤ 801 * Real.log x :=
+    fun p => b2_sP_upper_log x hx N p hN c hdom
   have hW0 : 0 ≤ 801 * Real.log x := by
     have hx1 : (1 : ℝ) ≤ x := by
       have h := Real.add_one_le_exp (1 : ℝ)
