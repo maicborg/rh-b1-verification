@@ -13,6 +13,54 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
+    name: Lean | ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - shard: integrated
+            targets: >-
+              Development.AutomorphicArithmetic.ShortNorms.supplyOfAdmOf
+              Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi
+          - shard: polynomials
+            targets: >-
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LRowstLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCdegLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCpleadLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCcompLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.FockDiagBound
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.RowDivStable
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LeadInterlaced
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LGradedLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LHwinLemmas
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.PeelHomog
+              Formalism.GradedWeylDivisibility.FockSpaceTableaux.PeelDecomp
+              Formalism.SatakeDualWeyl.AdelicIwasawaHecke.LinSubstIsHomogeneous
+              Formalism.FockGram.StatementFock
+          - shard: galois
+            targets: >-
+              Formalism.TameInertiaTowers.CentralOrderTwo.MemDecompositionSubgroupIff
+              Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets
+              Formalism.SizeWindowBrackets.GaloisToProductIsIso
+              Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour
+              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.NormOneSubConjMul
+              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.RayClassIdealCountEqNcardShiftedBinaryForm
+              Formalism.QuotientMetricDivisors.HermitianTwistDivisors.ValBasic
+          - shard: analysis
+            targets: >-
+              Formalism.RealPlaceAnalysis.RealPlaceTaylor.CompactHaarRightInvariantInst
+              Formalism.HarderNarasimhan.HarderNarasimhanProofs.FinSup
+              Formalism.SuccessiveMinima.SuccessiveMinimaProofs.MeasureEqCovolumeMulVolumeImage
+              Formalism.HarderNarasimhan.HarderNarasimhanProofs.GramBlock
+              Formalism.HarderNarasimhan.HarderNarasimhanProofs.PlaceSplit
+              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ExistsInterpolationExteriorSmallCoeffs
+              Formalism.QuotientMetricDivisors.HermitianTwistDivisors.DeterminantCauchySchwarz
+              Formalism.PeriodIntegrals.UnitaryGroupMassFormula.ExplicitFormula.LStructA
+              Formalism.PeriodIntegrals.UnitaryGroupMassFormula.ExplicitFormula.NormLogDerivReflLe
+              Formalism.GL3MeanSquares.ModelCocycleExponent
+              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ChoiceOfTops
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -112,11 +160,14 @@ jobs:
         id: cache
         with:
           path: upstream/lean/.lake/build
-          key: rh-assembly-v2-4341-${{ runner.os }}-${{ github.run_id }}
+          key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
             b2-incremental-lean4341-${{ runner.os }}-
       - name: Build only three imported targets
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         timeout-minutes: 115
         shell: bash
@@ -125,6 +176,7 @@ jobs:
           df -h .
           time lake build Formalism.GL3MeanSquares.HookFormulaTorsion.WeightedVonMangoldtSumIdentity Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow Formalism.GammaFactorNonvanishing.RhOfRight 2>&1 | tee ../../bridge/assembly-logs/imports.log
       - name: Kernel check V2 and audit all four declarations
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         shell: bash
         run: |
@@ -149,6 +201,7 @@ jobs:
               raise SystemExit("sorryAx detected")
           PY
       - name: Gate 2 | preflight arithmetic PairGood only
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         timeout-minutes: 20
         shell: bash
@@ -156,6 +209,7 @@ jobs:
           set -euo pipefail
           time lake build Development.AutomorphicArithmetic.CharacterBoxes.PairGood 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
       - name: Gate 2 | build pairEx using certified StagePow substitution
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         timeout-minutes: 115
         shell: bash
@@ -163,6 +217,7 @@ jobs:
           set -euo pipefail
           time lake build Development.AutomorphicArithmetic.MeanSquareBounds.pairEx 2>&1 | tee ../../bridge/assembly-logs/gate2-build.log
       - name: Gate 2 | verify axiom whitelist and actual proof dependencies
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         shell: bash
         run: |
@@ -253,15 +308,20 @@ jobs:
           assert s.count(old) == 1, 'Unexpected pinned PTCokerAt block'
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
-          time lake build Formalism.GaloisCohomology.Statement 2>&1 | tee ../../bridge/assembly-logs/gate3a-cohomology.log
+          if [ '${{ matrix.shard }}' = integrated ]; then
+            time lake build Formalism.GaloisCohomology.Statement 2>&1 | tee ../../bridge/assembly-logs/gate3a-cohomology.log
+          fi
       - name: Gate 3A | compile window and bounded characters
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         timeout-minutes: 40
         shell: bash
         run: |
           set -euo pipefail
           time lake build Development.AutomorphicArithmetic.CharacterBoxes.WinPairs Development.AutomorphicArithmetic.CharacterBoxes.BoundedTw 2>&1 | tee ../../bridge/assembly-logs/gate3a-window.log
-      - name: Gate 3A | compile supply on same host
+      - name: Gate 3A | compile assigned targets
+        env:
+          RH_TARGETS: ${{ matrix.targets }}
         working-directory: upstream/lean
         timeout-minutes: 115
         shell: bash
@@ -286,7 +346,7 @@ jobs:
               s = p.read_text(encoding='utf-8')
               assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
               p.write_text(s.replace(old, new), encoding='utf-8')
-          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean"]
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean"]
           for rel in coeff_files:
               p = Path(rel)
               s = p.read_text(encoding='utf-8')
@@ -297,10 +357,10 @@ jobs:
               i = 0
               while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
                   i += 1
-              compat = """private abbrev rhCompatCoeff {R σ : Type*} [Semiring R]
+              compat = """private abbrev rhCompatCoeff {R σ : Type*} [CommSemiring R]
             (m : σ →₀ ℕ) (p : MvPolynomial σ R) : R := p.coeff m
 
-          private theorem rhCompatCoeffZero {R σ : Type*} [Semiring R]
+          private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
             (m : σ →₀ ℕ) : rhCompatCoeff (R := R) m 0 = 0 := by
             simp [rhCompatCoeff]
 
@@ -309,8 +369,19 @@ jobs:
               p.write_text(''.join(lines), encoding='utf-8')
               print('Gate3A coefficient compatibility:', rel)
           PY
-          time lake build Development.AutomorphicArithmetic.ShortNorms.supplyOfAdmOf Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GL3MeanSquares/ModelCocycleExponent.lean","PowerSeries.derivative K","PowerSeries.derivative (R := K)",2],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DeterminantCauchySchwarz.lean","Finset.prod_le_prod (fun _ _ => zero_le_one)","Finset.prod_le_prod₀ (fun _ _ => zero_le_one)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ExistsInterpolationExteriorSmallCoeffs.lean","Finset.prod_le_one (fun i _ => norm_nonneg _)","Finset.prod_le_one₀ (fun i _ => norm_nonneg _)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","exact prod_le_one (fun c' _ => (hind c' _).1)","exact prod_le_one₀ (fun c' _ => (hind c' _).1)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun c' _ => ?_)","refine prod_le_prod₀ (fun c' _ => ?_)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun j _ => ?_)","refine prod_le_prod₀ (fun j _ => ?_)",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, f'Unexpected third compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          read -r -a targets <<< "$RH_TARGETS"
+          time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
+        if: matrix.shard == 'integrated'
         working-directory: upstream/lean
         shell: bash
         run: |
@@ -366,12 +437,12 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: upstream/lean/.lake/build
-          key: rh-assembly-v2-4341-${{ runner.os }}-${{ github.run_id }}
+          key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
       - name: Preserve diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rh-assembly-v2-${{ github.run_id }}
+          name: rh-assembly-v2-${{ github.run_id }}-${{ matrix.shard }}
           path: bridge/assembly-logs/
           if-no-files-found: ignore
           retention-days: 14
