@@ -277,6 +277,38 @@ jobs:
               p.write_text(s.replace(old, new, 1), encoding='utf-8')
               print('Gate3A API compatibility:', rel)
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          edits = [["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n    (DoubleCoset.out_eq' K K _).symm","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp\n    (DoubleCoset.out_eq' _).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' K K c)","((DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' c)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, rfl⟩).symm","((DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr ⟨a, a.2, b, b.2, rfl⟩).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n        (DoubleCoset.out_eq' K K (DoubleCoset.mk K K g))","(DoubleCoset.eq (H := K) (K := K) (a := Quotient.out (DoubleCoset.mk K K g)) (b := g)).mp\n        (DoubleCoset.out_eq' (DoubleCoset.mk K K g))"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","have h := DoubleCoset.eq.mp (hs _)","have h := (DoubleCoset.eq (H := Γ) (K := K) (a := s (DoubleCoset.mk Γ K g)) (b := g)).mp (hs (DoubleCoset.mk Γ K g))"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","AddMonoidAlgebra.coeff_add, Pi.add_apply","MvPolynomial.coeff_add"],["Formalism/FormalGroupLog/Statement.lean","MvPowerSeries.pderiv K i","MvPowerSeries.pderiv (R := K) i"],["Formalism/SharpRestriction/LevelLetterCocycles/DataNLoc.lean","PowerSeries.derivative LL E","PowerSeries.derivative (R := LL) E"],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","noncomputable def eGamE","set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean"]
+          for rel in coeff_files:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              # Restore the former coefficient argument order using a reducible alias.
+              s = re.sub(r"(?<![\w.])coeff(?![\w'])", "rhCompatCoeff", s)
+              s = re.sub(r"(?<![\w.])coeff_zero(?![\w'])", "rhCompatCoeffZero", s)
+              lines = s.splitlines(keepends=True)
+              i = 0
+              while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                  i += 1
+              compat = """private abbrev rhCompatCoeff {R σ : Type*} [Semiring R]
+            (m : σ →₀ ℕ) (p : MvPolynomial σ R) : R := p.coeff m
+
+          private theorem rhCompatCoeffZero {R σ : Type*} [Semiring R]
+            (m : σ →₀ ℕ) : rhCompatCoeff (R := R) m 0 = 0 := by
+            simp [rhCompatCoeff]
+
+          """
+              lines.insert(i, compat)
+              p.write_text(''.join(lines), encoding='utf-8')
+              print('Gate3A coefficient compatibility:', rel)
+          PY
           time lake build Development.AutomorphicArithmetic.ShortNorms.supplyOfAdmOf Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
         working-directory: upstream/lean
