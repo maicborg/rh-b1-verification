@@ -33,12 +33,13 @@ theorem b23_abel_quartic (a : ℕ → ℂ) (v : ℕ → ℝ) (N : ℕ) (C : ℝ)
   let w : ℕ → ℂ := fun n => ((v n ^ 4 : ℝ) : ℂ)
   let g : ℕ → ℝ := fun n => ‖∑ j ∈ range (n+1), a j‖
   have hnorm (n : ℕ) : ‖w n‖ = v n ^ 4 := by
-    simp [w, abs_of_nonneg (pow_nonneg (hv n) 4)]
+    change ‖((v n ^ 4 : ℝ) : ℂ)‖ = v n ^ 4
+    rw [Complex.norm_real, Real.norm_eq_abs, abs_of_nonneg (pow_nonneg (hv n) 4)]
   have hdiff (n : ℕ) : ‖w n-w (n+1)‖ = v n ^ 4-v (n+1)^4 := by
     have hp : v (n+1)^4 ≤ v n^4 := pow_le_pow_left₀ (hv (n+1)) (hmono n) 4
     dsimp [w]
     rw [← Complex.ofReal_sub]
-    simp [abs_of_nonneg (sub_nonneg.mpr hp)]
+    rw [Complex.norm_real, Real.norm_eq_abs, abs_of_nonneg (sub_nonneg.mpr hp)]
   have he : ‖w N‖ * g N ≤ C*v N := by
     rw [hnorm]
     calc
@@ -70,8 +71,8 @@ theorem b23_abel_quartic (a : ℕ → ℂ) (v : ℕ → ℝ) (N : ℕ) (C : ℝ)
       add_le_add he (sum_le_sum hd)
     _ = C*v N + 4*C*(v 0-v N) := by rw [← mul_sum, b23_telescope_real]
     _ = 4*C*v 0 - 3*C*v N := by ring
-    _ ≤ 4*C*v 0 := sub_le_self _ (by positivity)
-    _ ≤ 4*C*1 := mul_le_mul_of_nonneg_left hv0 (by positivity)
+    _ ≤ 4*C*v 0 := sub_le_self _ (mul_nonneg (mul_nonneg (by norm_num) hC) (hv N))
+    _ ≤ 4*C*1 := mul_le_mul_of_nonneg_left hv0 (mul_nonneg (by norm_num) hC)
     _ = _ := by ring
 
 #print axioms BorghettiRH.b23_quartic_difference
