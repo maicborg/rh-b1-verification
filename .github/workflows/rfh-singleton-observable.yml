@@ -111,7 +111,7 @@ jobs:
         id: cache
         with:
           path: upstream/lean/.lake/build
-          key: rh-assembly-v2-4341-${{ runner.os }}-integrated-45486329693
+          key: rh-assembly-v2-4341-${{ runner.os }}-integrated-45489418752
           restore-keys: |
             rh-assembly-v2-4341-${{ runner.os }}-
             b2-incremental-lean4341-${{ runner.os }}-
@@ -152,18 +152,64 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          lake build Development.AutomorphicArithmetic.PrimitiveCosets.GzEq 2>&1 | tee ../../bridge/assembly-logs/singleton-import.log
+          lake build Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions 2>&1 | tee ../../bridge/assembly-logs/singleton-import.log
       - name: Certify singleton observable identity
         working-directory: upstream/lean
         shell: bash
         run: |
           set -euo pipefail
           cat > RFHSingleton.lean <<'LEAN'
-          import Development.AutomorphicArithmetic.PrimitiveCosets.GzEq
+          import Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow
           import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions
           noncomputable section
           namespace BorghettiRH
           open Formalism.HC
+
+          theorem gz_eq_direct :
+              ∀ y : ℝ, Formalism.Gz y = An.G y ∧ An.G y = Deduction.G y := by
+            intro y
+            have hsum : ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, ArithmeticFunction.vonMangoldt n * (y / (n : ℝ) - 1)
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              apply Finset.sum_congr rfl
+              intro n hn
+              rw [Finset.mem_Icc] at hn
+              have hn1 : (1 : ℝ) ≤ n := by exact_mod_cast hn.1
+              have hy : (n : ℝ) ≤ y := by
+                have hk : 0 < ⌊y⌋₊ := lt_of_lt_of_le Nat.zero_lt_one (le_trans hn.1 hn.2)
+                have hy0 : 0 ≤ y := by
+                  by_contra hneg
+                  push_neg at hneg
+                  rw [Nat.floor_eq_zero.2 (lt_trans hneg zero_lt_one)] at hk
+                  exact lt_irrefl 0 hk
+                exact le_trans (by exact_mod_cast hn.2) (Nat.floor_le hy0)
+              have hpos : (0 : ℝ) < n := by linarith
+              have : 0 ≤ y / (n : ℝ) - 1 := by
+                rw [sub_nonneg, le_div_iff₀ hpos, one_mul]
+                exact hy
+              rw [max_eq_left this]
+            have hre : (Deduction.ramp (fun _ => 1) y).re
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              have hsub : Finset.Icc 1 ⌊y⌋₊ ⊆ Finset.range (⌊y⌋₊ + 1) := by
+                intro n hn
+                rw [Finset.mem_Icc] at hn
+                rw [Finset.mem_range]
+                omega
+              rw [Finset.sum_subset hsub]
+              · simp [Deduction.ramp, Complex.re_sum]
+              · intro n hn hn'
+                have h0 : n = 0 := by
+                  rw [Finset.mem_range] at hn
+                  rw [Finset.mem_Icc] at hn'
+                  omega
+                subst h0
+                simp
+            refine ⟨?_, ?_⟩
+            · simp only [Formalism.Gz, Formalism.Sz, An.G]
+              rw [hsum]
+              ring
+            · simp only [An.G, Deduction.G]
+              rw [hre]
+              ring
 
           theorem singleton_kept : (Level.cyc PChar.one).KEPT = {PChar.one} := by
             classical
@@ -184,8 +230,9 @@ jobs:
             have h : (Level.cyc PChar.one).Nt = ∅ := by
               simp [Level.Nt, singleton_kept]
             rw [Level.Gm, h, Finset.sum_empty, add_zero]
-            exact (UpperTheory.Comparison₂.Gz_eq y).1.trans (UpperTheory.Comparison₂.Gz_eq y).2
+            exact (gz_eq_direct y).1.trans (gz_eq_direct y).2
 
+          #print axioms BorghettiRH.gz_eq_direct
           #print axioms BorghettiRH.singleton_kept
           #print axioms BorghettiRH.singleton_Gm_eq
           end BorghettiRH
@@ -195,7 +242,7 @@ jobs:
           import re
           from pathlib import Path
           log = Path("../../bridge/assembly-logs/singleton.log").read_text()
-          for name in ["singleton_kept", "singleton_Gm_eq"]:
+          for name in ["gz_eq_direct", "singleton_kept", "singleton_Gm_eq"]:
               m = re.search(r"BorghettiRH\." + name + r"' depends on axioms:\s*\[([^\]]*)\]", log)
               if not m:
                   raise SystemExit("Missing axiom report: " + name)
