@@ -217,6 +217,107 @@ jobs:
           if 'sorryAx' in log or log.count('VERIFIED_EDGE') != 11:
               raise SystemExit('Gate 2 audit incomplete')
           PY
+      - name: Gate 3A | restore geometric imports and elaborate cokernel
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Development/AutomorphicArithmetic/CharacterBoxes/TwistForm.lean')
+          s = p.read_text(encoding='utf-8')
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.PairGood\n'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old + 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n', 1), encoding='utf-8')
+          p = Path('Formalism/GaloisCohomology/Statement.lean')
+          s = p.read_text(encoding='utf-8')
+          old = '''def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=
+            PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          new = '''set_option backward.isDefEq.respectTransparency false in
+          def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop := by
+            letI : ∀ v : D.S, AddCommGroup (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : ∀ v : D.S, Module ℤ_[l] (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : AddCommGroup (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.addCommGroup
+            letI : Module ℤ_[l] (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.module _ _ _
+            exact PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          assert s.count(old) == 1, 'Unexpected pinned PTCokerAt block'
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          time lake build Formalism.GaloisCohomology.Statement 2>&1 | tee ../../bridge/assembly-logs/gate3a-cohomology.log
+      - name: Gate 3A | compile window and bounded characters
+        working-directory: upstream/lean
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Development.AutomorphicArithmetic.CharacterBoxes.WinPairs Development.AutomorphicArithmetic.CharacterBoxes.BoundedTw 2>&1 | tee ../../bridge/assembly-logs/gate3a-window.log
+      - name: Gate 3A | compile supply on same host
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Development.AutomorphicArithmetic.ShortNorms.supplyOfAdmOf Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
+      - name: Gate 3A | audit actual proof dependencies and axioms
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RHGate3AAudit.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi
+          import Lean.Util.FoldConsts
+          open Lean Elab Command
+
+          #print axioms UpperTheory.Top.winPairs
+          #print axioms UpperTheory.Top.boundedTw
+          #print axioms UpperTheory.T3.supplyOfAdmOf
+          #print axioms UpperTheory.Top.supplyOfAdm
+          #print axioms UpperTheory.Top.supplyChi
+
+          run_cmd do
+            let env ← getEnv
+            let edges : List (Name × Name) := [
+              (``UpperTheory.Top.supplyChi, ``UpperTheory.Top.supplyOfAdm),
+              (``UpperTheory.Top.supplyOfAdm, ``UpperTheory.T3.supplyOfAdmOf),
+              (``UpperTheory.T3.supplyOfAdmOf, ``UpperTheory.Top.winPairs),
+              (``UpperTheory.T3.supplyOfAdmOf, ``QH.pairEx),
+              (``UpperTheory.T3.supplyOfAdmOf, ``UpperTheory.Top.boundedTw),
+              (``UpperTheory.Top.boundedTw, ``UpperTheory.Top.PairGood.bounds)]
+            for (a, b) in edges do
+              let some ci := env.find? a | throwError m!"Missing declaration: {a}"
+              let some v := ci.value? (allowOpaque := true) | throwError m!"No proof term for {a}"
+              unless v.getUsedConstants.contains b do
+                throwError m!"Missing proof dependency: {a} -> {b}"
+              logInfo m!"VERIFIED_EDGE {a} -> {b}"
+          LEAN
+          lake env lean RHGate3AAudit.lean 2>&1 | tee ../../bridge/assembly-logs/gate3a-audit.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path('../../bridge/assembly-logs/gate3a-audit.log').read_text()
+          expected = ['UpperTheory.Top.winPairs', 'UpperTheory.Top.boundedTw', 'UpperTheory.T3.supplyOfAdmOf', 'UpperTheory.Top.supplyOfAdm', 'UpperTheory.Top.supplyChi']
+          allowed = {'propext', 'Classical.choice', 'Quot.sound'}
+          for name in expected:
+              m = re.search(re.escape(name) + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              if not m:
+                  raise SystemExit('Missing axiom report: ' + name)
+              axioms = {x.strip() for x in m.group(1).split(',') if x.strip()}
+              if not axioms <= allowed:
+                  raise SystemExit(f'Unexpected axioms in {name}: {axioms}')
+              print('VERIFIED', name, sorted(axioms))
+          if 'sorryAx' in log or log.count('VERIFIED_EDGE') != 6:
+              raise SystemExit('Gate 3A audit incomplete')
+          PY
       - name: Save compiled modules even after failure
         if: always()
         continue-on-error: true
