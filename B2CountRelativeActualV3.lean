@@ -3,7 +3,7 @@ import Development.AutomorphicArithmetic.MeanSquareBounds.B2JacobiRelativeActual
 import Development.AutomorphicArithmetic.MeanSquareBounds.B2PrimeSetOneEndpoint
 import Development.AutomorphicArithmetic.MeanSquareBounds.B2SmallErrorBudget
 import Formalism.GL3MeanSquares.GenusMeanAsymptotics.JacobiCharacterSums.MSqCount
-import Formalism.LandauZeroFreeBounds.SiegelWalfiszAPOfSiegelLower
+import Development.AutomorphicArithmetic.MeanSquareBounds.B2CountNoExceptionV1
 
 /-!
 The original Alpoge theorem count_a supplies sqrt(U) <= d * |PPset|
@@ -51,8 +51,7 @@ theorem b2_actual_count_and_jacobi_small_error_v3
     b2_pnt_relative_without_exception h78
       Formalism.HermitianLattices.Ext.PrimesInProgressions.pnt_progressions_relative_weak_holds
   obtain ⟨Y₁, hCount⟩ :=
-    count_a Formalism.HermitianLattices.Ext.PrimesInProgressions.pnt_progressions_relative_weak_holds
-      Formalism.ZeroFreeDirichlet.excBound ε hε
+    b2_count_a_no_exception_from_OAI ε hε
   refine ⟨cJ, AJ, CJ, cP, AP, CP, Y₁, hcJ, hcP, ?_⟩
   intro Y U B m s a hY hYone hAd hB hs hodd hsq hcop hU hthJ hthP hEP hEJ hd hTau
   let T : ℝ := liX U / (m.totient : ℝ)
