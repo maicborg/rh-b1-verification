@@ -67,7 +67,7 @@ jobs:
           PY
           python3 - <<'PY'
           from pathlib import Path
-          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1],["Formalism/GaloisCohomology/Statement.lean","((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸\n        LinearMap.range (localH2 D e))","(@HasQuotient.Quotient _ _\n        (Submodule.hasQuotient (R := ℤ_[l]) (M := ∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))))\n        (LinearMap.range (localH2 D e)))",1]]:
               p = Path('upstream/lean') / rel
               s = p.read_text(encoding='utf-8')
               if s.count(old) != count:
@@ -130,13 +130,13 @@ jobs:
           if "sorryAx" in log:
               raise SystemExit("sorryAx detected")
           PY
-      - name: Gate 2 | preflight two compatibility repairs
+      - name: Gate 2 | preflight compatibility repairs
         working-directory: upstream/lean
         timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
-          time lake build Formalism.TameInertiaTowers.StatementGroup ReciprocityTheory.GaloisValuations.GlobalB 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
+          time lake build Formalism.TameInertiaTowers.StatementGroup ReciprocityTheory.GaloisValuations.GlobalB Formalism.GaloisCohomology.Statement 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
       - name: Gate 2 | build pairEx using certified StagePow substitution
         working-directory: upstream/lean
         timeout-minutes: 115
