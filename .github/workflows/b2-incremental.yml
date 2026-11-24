@@ -106,7 +106,7 @@ jobs:
           lean_lib Supplements where globs := #[`Supplements.+]
           EOF
           mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
-          for f in B2NoExceptional B2JacobiClassZero B2IntegratedBridge B2JacobiRelativeActual B2PrimeSetOneEndpoint B2SmallErrorBudget B2CountNoExceptionV1 B2CountRelativeActualV3 B2AdmittedLogModulusV3 B2PNTThresholdFromBudget B2UniformPNTFromAdmittedV4 B2JacobiEnvelopeV3 B2ExponentFromAdmittedV4 B2LowEndpointDecayV2 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 B2RealPNT; do
+          for f in B2NoExceptional B2JacobiClassZero B2IntegratedBridge B2JacobiRelativeActual B2PrimeSetOneEndpoint B2SmallErrorBudget B2CountNoExceptionV1 B2CountRelativeActualV3 B2AdmittedLogModulusV3 B2PNTThresholdFromBudget B2UniformPNTFromAdmittedV4 B2JacobiEnvelopeV3 B2ExponentFromAdmittedV4 B2LowEndpointDecayV2 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 B2IntervalLocalEnergyV1 B2RealPNT; do
             cp "bridge/$f.lean" upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
           done
           python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
@@ -173,6 +173,7 @@ jobs:
             Development.AutomorphicArithmetic.MeanSquareBounds.B2JacobiPairCorrelationV1 \
             Development.AutomorphicArithmetic.MeanSquareBounds.B2IntervalSecondMomentV1 \
             Development.AutomorphicArithmetic.MeanSquareBounds.B2IntervalPrimepowersBudgetV1 \
+            Development.AutomorphicArithmetic.MeanSquareBounds.B2IntervalLocalEnergyV1 \
             Development.AutomorphicArithmetic.MeanSquareBounds.meanSqK \
             Development.AutomorphicArithmetic.MeanSquareBounds.StagePow 2>&1 | tee ../../bridge/b2-logs/stagepow.log
       - name: "5 | Check real theorem axioms; reject sorryAx"
@@ -181,7 +182,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in B2RealPNT B2CountNoExceptionV1 B2CountRelativeActualV3 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 meanSqK StagePow; do
+          for file in B2RealPNT B2CountNoExceptionV1 B2CountRelativeActualV3 B2TwistKNoExceptionConditionalV5 B2TwistKAllOddV6 B2JacobiPairCorrelationV1 B2IntervalSecondMomentV1 B2IntervalPrimepowersBudgetV1 B2IntervalLocalEnergyV1 meanSqK StagePow; do
             lake env lean Development/AutomorphicArithmetic/MeanSquareBounds/$file.lean \
               2>&1 | tee "../../bridge/b2-logs/axioms-$file.log"
             if grep -q sorryAx "../../bridge/b2-logs/axioms-$file.log"; then
