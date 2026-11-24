@@ -65,6 +65,16 @@ jobs:
           p.write_text(s, encoding='utf-8')
           print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
           mkdir -p bridge/assembly-logs
           cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
       - name: Install Lean
@@ -120,6 +130,13 @@ jobs:
           if "sorryAx" in log:
               raise SystemExit("sorryAx detected")
           PY
+      - name: Gate 2 | preflight two compatibility repairs
+        working-directory: upstream/lean
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Formalism.TameInertiaTowers.StatementGroup ReciprocityTheory.GaloisValuations.GlobalB 2>&1 | tee ../../bridge/assembly-logs/gate2-preflight.log
       - name: Gate 2 | build pairEx using certified StagePow substitution
         working-directory: upstream/lean
         timeout-minutes: 115
