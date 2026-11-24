@@ -42,7 +42,9 @@ theorem b2_sP_partition_primepowers (c : ℕ → ℝ) (N : ℕ)
           · have hpr : n.minFac.Prime := Nat.minFac_prime hpp.ne_one
             have hnN : n ≤ N := (Finset.mem_Icc.mp hn).2
             have hmn : n.minFac ≤ N :=
-              (Nat.minFac_le hpp.ne_one).trans hnN
+              (Nat.minFac_le (by
+                have hn1 : 1 ≤ n := (Finset.mem_Icc.mp hn).1
+                omega)).trans hnN
             have hmem : n.minFac ∈ (Icc 1 N).filter Nat.Prime :=
               Finset.mem_filter.mpr ⟨Finset.mem_Icc.mpr
                 ⟨hpr.one_lt.le, hmn⟩, hpr⟩
