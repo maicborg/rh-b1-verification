@@ -23,44 +23,6 @@ jobs:
             targets: >-
               Development.AutomorphicArithmetic.ShortNorms.supplyOfAdmOf
               Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi
-          - shard: polynomials
-            targets: >-
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LRowstLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCdegLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCpleadLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LCcompLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.FockDiagBound
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.RowDivStable
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LeadInterlaced
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LGradedLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.LHwinLemmas
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.PeelHomog
-              Formalism.GradedWeylDivisibility.FockSpaceTableaux.PeelDecomp
-              Formalism.SatakeDualWeyl.AdelicIwasawaHecke.LinSubstIsHomogeneous
-              Formalism.FockGram.StatementFock
-          - shard: galois
-            targets: >-
-              Formalism.TameInertiaTowers.CentralOrderTwo.MemDecompositionSubgroupIff
-              Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets
-              Formalism.SizeWindowBrackets.GaloisToProductIsIso
-              Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour
-              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.NormOneSubConjMul
-              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.RayClassIdealCountEqNcardShiftedBinaryForm
-              Formalism.QuotientMetricDivisors.HermitianTwistDivisors.ValBasic
-          - shard: analysis
-            targets: >-
-              Formalism.RealPlaceAnalysis.RealPlaceTaylor.CompactHaarRightInvariantInst
-              Formalism.HarderNarasimhan.HarderNarasimhanProofs.FinSup
-              Formalism.SuccessiveMinima.SuccessiveMinimaProofs.MeasureEqCovolumeMulVolumeImage
-              Formalism.HarderNarasimhan.HarderNarasimhanProofs.GramBlock
-              Formalism.HarderNarasimhan.HarderNarasimhanProofs.PlaceSplit
-              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ExistsInterpolationExteriorSmallCoeffs
-              Formalism.QuotientMetricDivisors.HermitianTwistDivisors.DeterminantCauchySchwarz
-              Formalism.PeriodIntegrals.UnitaryGroupMassFormula.ExplicitFormula.LStructA
-              Formalism.PeriodIntegrals.UnitaryGroupMassFormula.ExplicitFormula.NormLogDerivReflLe
-              Formalism.GL3MeanSquares.ModelCocycleExponent
-              Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ChoiceOfTops
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -162,6 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45486329693
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -357,12 +320,11 @@ jobs:
               i = 0
               while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
                   i += 1
-              compat = """private abbrev rhCompatCoeff {R σ : Type*} [CommSemiring R]
-            (m : σ →₀ ℕ) (p : MvPolynomial σ R) : R := p.coeff m
+              compat = """local notation "rhCompatCoeff" => (fun m p => MvPolynomial.coeff p m)
 
           private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
-            (m : σ →₀ ℕ) : rhCompatCoeff (R := R) m 0 = 0 := by
-            simp [rhCompatCoeff]
+            (m : σ →₀ ℕ) : MvPolynomial.coeff (0 : MvPolynomial σ R) m = 0 := by
+            simp
 
           """
               lines.insert(i, compat)
@@ -377,6 +339,47 @@ jobs:
               s = p.read_text(encoding='utf-8')
               assert s.count(old) == count, f'Unexpected third compatibility block: {rel}'
               p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          coeff_roots = [
+              Path("Formalism/GradedWeylDivisibility/FockSpaceTableaux"),
+              Path("Formalism/SatakeDualWeyl/AdelicIwasawaHecke"),
+              Path("Formalism/FockGram/FockGramProofs")
+          ]
+          # Limit changes to files with the old coefficient lemma in the failed closure.
+          coeff_names = {"LNondomLemmas.lean", "LGradedLemmas.lean", "FockPerm.lean",
+              "LRowstLemmas.lean", "LCcompLemmas.lean", "LCpleadLemmas.lean",
+              "FockDiagBound.lean", "LeadInterlaced.lean", "LHwinLemmas.lean",
+              "PeelHomog.lean", "LinSubstIsHomogeneous.lean"}
+          for root in coeff_roots:
+              for p in root.glob("*.lean"):
+                  if p.name not in coeff_names:
+                      continue
+                  old = p.read_text(encoding="utf-8")
+                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "MvPolynomial.coeff_add", old)
+                  if new != old:
+                      p.write_text(new, encoding="utf-8")
+                      print("Qualified coefficient lemma:", p)
+          def edit(rel, old, new, count):
+              p = Path(rel)
+              s = p.read_text(encoding="utf-8")
+              assert s.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(s.replace(old, new), encoding="utf-8")
+              print("Gate3A targeted compatibility:", rel)
+          rel = "Formalism/TameInertiaTowers/CentralOrderTwo/MemDecompositionSubgroupIff.lean"
+          for zp in ["zpowers", "Subgroup.zpowers"]:
+              edit(rel, f"(powMonoidHom 2 : (GalL n ⧸ {zp} (JJ n)) →* _).range",
+                   f"(powMonoidHom (α := GalL n ⧸ {zp} (JJ n)) 2).range", 2)
+          rel = "Formalism/RealPlaceAnalysis/RealPlaceTaylor/CompactHaarRightInvariantInst.lean"
+          edit(rel, "isProbabilityMeasure_map hm.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff hm.aemeasurable).2 inferInstance", 1)
+          edit(rel, "isProbabilityMeasure_map measurable_inv.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff measurable_inv.aemeasurable).2 inferInstance", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE",
+               "set_option maxHeartbeats 8000000 in\nnoncomputable def eGamE", 1)
           PY
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
