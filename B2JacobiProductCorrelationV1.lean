@@ -22,8 +22,10 @@ theorem b2_jacobi_list_product (q : ℕ) (ps : List ℕ) :
   induction ps with
   | nil => simp [jacobiSym.one_left]
   | cons p ps ih =>
-    simp only [List.map_cons, List.prod_cons, Nat.cast_mul,
-      jacobiSym.mul_left, ih]
+    change jacobiSym (p : ℤ) q *
+      (ps.map (fun r : ℕ => jacobiSym (r : ℤ) q)).prod =
+      jacobiSym ((p * ps.prod : ℕ) : ℤ) q
+    rw [ih, Nat.cast_mul, jacobiSym.mul_left]
 
 theorem b2_jacobi_product_average :
     ∀ ε A B : ℝ, 0 < ε → 0 < A → 0 < B →
