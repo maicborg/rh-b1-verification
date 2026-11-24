@@ -90,11 +90,12 @@ theorem b23_even_tuple_count {α : Type*} [Fintype α] [Nonempty α]
       ∀ a : α, Even ((univ.filter (fun i => f i = a)).card))).card ≤
         k ^ (2*k) * (Fintype.card α) ^ k := by
   classical
-  apply le_trans (card_le_card (s₂ := univ.filter
-    (fun f : Fin (2*k) → α => (b23Range f).card ≤ k)) ?_)
-    (b23_sparse_tuple_count k)
-  intro f hf
-  exact mem_filter.mpr ⟨mem_univ _, b23_even_range_le k f (mem_filter.mp hf).2⟩
+  have hsub : ((univ : Finset (Fin (2*k) → α)).filter (fun f =>
+      ∀ a : α, Even ((univ.filter (fun i => f i = a)).card))) ⊆
+      univ.filter (fun f : Fin (2*k) → α => (b23Range f).card ≤ k) := by
+    intro f hf
+    exact mem_filter.mpr ⟨mem_univ _, b23_even_range_le k f (mem_filter.mp hf).2⟩
+  exact (card_le_card hsub).trans (b23_sparse_tuple_count k)
 
 /-- Finite real moment expansion with arbitrary correlations. -/
 theorem b23_moment_expand {α β : Type*} [Fintype α]
