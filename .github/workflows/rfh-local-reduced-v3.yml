@@ -1,4 +1,4 @@
-name: RFH | Local adapter and minimal producer interfaces
+name: RFH | TopG rank compatibility and minimal interface
 on:
   push:
     branches: [assembly/uno-due-tre-v2]
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        track: [local, interfaces]
+        track: [interfaces]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -116,6 +116,8 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-local-reduced-v3-4341-${{ runner.os }}-${{ matrix.track }}-${{ github.run_id }}
           restore-keys: |
+            rfh-local-reduced-v3-4341-${{ runner.os }}-interfaces-45662749939
+            rfh-local-reduced-v3-4341-${{ runner.os }}-local-45662749939
             rfh-complete-123-v2-4341-${{ runner.os }}-45649780537
             rfh-parallel-audit-4341-${{ runner.os }}-core-45644481024
             rfh-parallel-audit-4341-${{ runner.os }}-galois-45644481024
@@ -669,6 +671,38 @@ jobs:
               assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
           assert 'sorryAx' not in s
           PY
+      - name: Repair and preflight exact TopG rank dependency
+        if: matrix.track == 'interfaces'
+        working-directory: upstream/lean
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/LocalRingCardinality/RankBoundMonotoneInDimension.lean")
+          s = p.read_text(encoding="utf-8")
+          marker = "theorem iotaH_bijective (e : ℕ)"
+          assert s.count(marker) == 1
+          s = s.replace(marker, "set_option backward.isDefEq.respectTransparency false in\n" + marker, 1)
+          old = "    rw [pow_inj_mod, orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hij\n    exact ZMod.val_injective _ hij"
+          new = "    letI : CommGroup (HGrp e) :=\n      QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n    have hmod := (pow_inj_mod (x := hcl e (u5 (e + 2)))\n      (n := i.val) (m := j.val)).mp hij\n    rw [orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i),\n      Nat.mod_eq_of_lt (ZMod.val_lt j)] at hmod\n    exact ZMod.val_injective _ hmod"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new, 1), encoding="utf-8")
+          PY
+          lake build Formalism.LocalRingCardinality.RankBoundMonotoneInDimension 2>&1 | tee ../../bridge/assembly-logs/rank-preflight.log
+          cat > RFHRankCheck.lean <<'LEAN'
+          import Formalism.LocalRingCardinality.RankBoundMonotoneInDimension
+          #print axioms Formalism.BasicNotions.iotaH_bijective
+          LEAN
+          lake env lean RFHRankCheck.lean 2>&1 | tee ../../bridge/assembly-logs/rank-axioms.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path("../../bridge/assembly-logs/rank-axioms.log").read_text()
+          m = re.search(r"iotaH_bijective' depends on axioms:\s*\[([^\]]*)\]", s)
+          assert m and {x.strip() for x in m.group(1).split(",") if x.strip()} <= {"propext", "Classical.choice", "Quot.sound"}
+          PY
       - name: Extract TopG predicate and hypothesis interface without terminal theorem
         if: matrix.track == 'interfaces'
         working-directory: upstream/lean
@@ -738,6 +772,13 @@ jobs:
           #print axioms UpperTheory.Top.hypV_of_cls
           LEAN
           lake env lean RFHTopGInterfaceCheck.lean 2>&1 | tee ../../bridge/assembly-logs/topg-interface-check.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path("../../bridge/assembly-logs/topg-interface-check.log").read_text()
+          m = re.search(r"hypV_of_cls' depends on axioms:\s*\[([^\]]*)\]", s)
+          assert m and {x.strip() for x in m.group(1).split(",") if x.strip()} <= {"propext", "Classical.choice", "Quot.sound"}
+          PY
       - name: Save shared frontier cache
         if: always()
         continue-on-error: true
