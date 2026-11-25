@@ -127,9 +127,6 @@ jobs:
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45598980461
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45595900725
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45581705857
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45578450166
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45575466969
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45570323625
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
