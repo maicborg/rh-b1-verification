@@ -113,6 +113,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-normalized-balance-4341-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            rfh-normalized-balance-4341-${{ runner.os }}-45567823281
             rfh-local-balance-4341-${{ runner.os }}-45565368155
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -225,7 +226,8 @@ jobs:
               (topExcess D N ell TT a w) hH hS
             have hx : 0 < x := by linarith [hH.1]
             rw [(gz_eq_direct x).1, (gz_eq_direct x).2] at h
-            exact normalize_balance _ _ _ _ _ _ hP hd hx h
+            apply normalize_balance _ _ _ _ _ _ hP hd hx
+            simpa only [mul_assoc] using h
           
           theorem absorb_normalized (C eps : ℝ) (hC : 0 ≤ C) (he : 0 < eps) :
               ∃ X : ℝ, ∀ x ≥ X, ∀ (g R : ℝ),
