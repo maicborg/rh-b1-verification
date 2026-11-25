@@ -1,0 +1,429 @@
+name: RFH | producer TopG and VWin
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths:
+      - .github/workflows/rfh-producer.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-producer
+  cancel-in-progress: true
+jobs:
+  verify:
+    name: Lean | ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - shard: vwin
+          - shard: topg
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 45
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rh-rfh-producer-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45554256812
+            rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-
+            rh-assembly-v2-4341-${{ runner.os }}-
+            b2-incremental-lean4341-${{ runner.os }}-
+      - name: Producer | restore geometric source compatibility
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Development/AutomorphicArithmetic/CharacterBoxes/TwistForm.lean')
+          s = p.read_text(encoding='utf-8')
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.PairGood\n'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old + 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n', 1), encoding='utf-8')
+          p = Path('Formalism/GaloisCohomology/Statement.lean')
+          s = p.read_text(encoding='utf-8')
+          old = '''def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=
+            PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          new = '''set_option backward.isDefEq.respectTransparency false in
+          def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop := by
+            letI : ∀ v : D.S, AddCommGroup (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : ∀ v : D.S, Module ℤ_[l] (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : AddCommGroup (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.addCommGroup
+            letI : Module ℤ_[l] (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.module _ _ _
+            exact PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          assert s.count(old) == 1, 'Unexpected pinned PTCokerAt block'
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Producer | apply current exact compatibility patches
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          patches = [["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","by convert hmq'; exact Subsingleton.elim _ _","by convert hmq' <;> exact Subsingleton.elim _ _"],["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","      convert this using 1\n      norm_num","      convert this using 1 <;> norm_num"],["Formalism/LatticeTheta/LatticeThetaProofs/LatticeSummableDecay.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/AdaptedBasis.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/LatticeSlopes/LatticeSlopesProofs/FiniteSaturated.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Ipindep.lean","(DoubleCoset.eq _ _ (s c) (s' c)).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g (Quotient.out (DoubleCoset.mk K K g))).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K s (Quotient.out c)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g ((a : G) * g * b)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K (Quotient.out (DoubleCoset.mk K K g)) g).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","(DoubleCoset.eq Γ K (s (DoubleCoset.mk Γ K g)) g).1","DoubleCoset.eq.mp"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","Finset.prod_le_prod (fun i _ => Finset.sum_nonneg","Finset.prod_le_prod₀ (fun i _ => Finset.sum_nonneg"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","        refine (hPSD.dotProduct_mulVec_zero_iff v).mp ?_\n        rw [star_trivial]\n        exact heq.symm","        exact hPSD.dotProduct_mulVec_zero_iff.mp (by simpa only [star_trivial] using heq.symm)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_prod (fun i _ => hnn i)","Finset.prod_le_prod₀ (fun i _ => hnn i)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","(hG.dotProduct_mulVec_zero_iff _).mp","hG.dotProduct_mulVec_zero_iff.mp"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_one (fun c _ => hcol0 c)","Finset.prod_le_one₀ (fun c _ => hcol0 c)"],["Formalism/TameInertiaTowers/CentralOrderTwo/Groups.lean","Finset.prod_le_prod (fun _ _ => Nat.zero_le _) (fun i _ => hfin i)","Finset.prod_le_prod (fun i _ => hfin i)"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply]"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add, star_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply, star_add]"],["Formalism/GradedWeylDivisibility/StatementC.lean","(coeff m g)","(g.coeff m)"]]
+          for rel, old, new in patches:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, f'Unexpected compatibility block: {rel}'
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('Gate3A API compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          edits = [["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n    (DoubleCoset.out_eq' K K _).symm","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp\n    (DoubleCoset.out_eq' _).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' K K c)","((DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' c)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, rfl⟩).symm","((DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr ⟨a, a.2, b, b.2, rfl⟩).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n        (DoubleCoset.out_eq' K K (DoubleCoset.mk K K g))","(DoubleCoset.eq (H := K) (K := K) (a := Quotient.out (DoubleCoset.mk K K g)) (b := g)).mp\n        (DoubleCoset.out_eq' (DoubleCoset.mk K K g))"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","have h := DoubleCoset.eq.mp (hs _)","have h := (DoubleCoset.eq (H := Γ) (K := K) (a := s (DoubleCoset.mk Γ K g)) (b := g)).mp (hs (DoubleCoset.mk Γ K g))"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","AddMonoidAlgebra.coeff_add, Pi.add_apply","MvPolynomial.coeff_add"],["Formalism/FormalGroupLog/Statement.lean","MvPowerSeries.pderiv K i","MvPowerSeries.pderiv (R := K) i"],["Formalism/SharpRestriction/LevelLetterCocycles/DataNLoc.lean","PowerSeries.derivative LL E","PowerSeries.derivative (R := LL) E"],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","noncomputable def eGamE","set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelLead.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaTallZero.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwlineLemmas.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/DualWeylModuleStable.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Wlocal.lean"]
+          for rel in coeff_files:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              # Restore the former coefficient argument order using a reducible alias.
+              # Preserve the two partial applications and the named-argument generalize.
+              if rel.endswith(("LNondomLemmas.lean", "Wlocal.lean")):
+                  assert s.count("congrArg (coeff m)") == 1
+                  s = s.replace("congrArg (coeff m)", "congrArg (fun p => AddMonoidAlgebra.coeff p m)")
+              if rel.endswith("LHwinLemmas.lean"):
+                  assert s.count("congrArg (coeff d)") == 1
+                  s = s.replace("congrArg (coeff d)", "congrArg (fun p => AddMonoidAlgebra.coeff p d)")
+              if rel.endswith("LinSubstIsHomogeneous.lean"):
+                  assert s.count("coeff (R := O) (σ := n) α _") == 1
+                  s = s.replace("coeff (R := O) (σ := n) α _", "AddMonoidAlgebra.coeff (_ : MvPolynomial n O) α")
+              s = re.sub(r"(?<![\w.])coeff(?![\w'])", "rhCompatCoeff", s)
+              s = re.sub(r"(?<![\w.])coeff_zero(?![\w'])", "rhCompatCoeffZero", s)
+              lines = s.splitlines(keepends=True)
+              i = 0
+              while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                  i += 1
+              compat = """local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
+
+          private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            change (p + q).coeff m = p.coeff m + q.coeff m
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) : AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m = 0 := by
+            simp
+
+          """
+              lines.insert(i, compat)
+              p.write_text(''.join(lines), encoding='utf-8')
+              print('Gate3A coefficient compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GL3MeanSquares/ModelCocycleExponent.lean","PowerSeries.derivative K","PowerSeries.derivative (R := K)",2],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DeterminantCauchySchwarz.lean","Finset.prod_le_prod (fun _ _ => zero_le_one)","Finset.prod_le_prod₀ (fun _ _ => zero_le_one)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ExistsInterpolationExteriorSmallCoeffs.lean","Finset.prod_le_one (fun i _ => norm_nonneg _)","Finset.prod_le_one₀ (fun i _ => norm_nonneg _)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","exact prod_le_one (fun c' _ => (hind c' _).1)","exact prod_le_one₀ (fun c' _ => (hind c' _).1)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun c' _ => ?_)","refine prod_le_prod₀ (fun c' _ => ?_)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun j _ => ?_)","refine prod_le_prod₀ (fun j _ => ?_)",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, f'Unexpected third compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          coeff_roots = [
+              Path("Formalism/GradedWeylDivisibility/FockSpaceTableaux"),
+              Path("Formalism/SatakeDualWeyl/AdelicIwasawaHecke"),
+              Path("Formalism/FockGram/FockGramProofs")
+          ]
+          # Limit changes to files with the old coefficient lemma in the failed closure.
+          coeff_names = {"LNondomLemmas.lean", "LGradedLemmas.lean", "FockPerm.lean",
+              "LRowstLemmas.lean", "LCcompLemmas.lean", "LCpleadLemmas.lean",
+              "FockDiagBound.lean", "LeadInterlaced.lean", "LHwinLemmas.lean",
+              "PeelHomog.lean", "LinSubstIsHomogeneous.lean"}
+          for root in coeff_roots:
+              for p in root.glob("*.lean"):
+                  if p.name not in coeff_names:
+                      continue
+                  old = p.read_text(encoding="utf-8")
+                  if p.name == "FockPerm.lean":
+                      helper = """private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            (p + q).coeff m = p.coeff m + q.coeff m := by
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          """
+                      lines = old.splitlines(keepends=True)
+                      i = 0
+                      while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                          i += 1
+                      lines.insert(i, helper)
+                      old = ''.join(lines)
+                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "rhCompatCoeffAdd", old)
+                  if new != old:
+                      p.write_text(new, encoding="utf-8")
+                      print("Qualified coefficient lemma:", p)
+          def edit(rel, old, new, count):
+              p = Path(rel)
+              s = p.read_text(encoding="utf-8")
+              assert s.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(s.replace(old, new), encoding="utf-8")
+              print("Gate3A targeted compatibility:", rel)
+          rel = "Formalism/TameInertiaTowers/CentralOrderTwo/MemDecompositionSubgroupIff.lean"
+          for zp in ["zpowers", "Subgroup.zpowers"]:
+              edit(rel, f"(powMonoidHom 2 : (GalL n ⧸ {zp} (JJ n)) →* _).range",
+                   f"(powMonoidHom (α := GalL n ⧸ {zp} (JJ n)) 2).range", 2)
+          rel = "Formalism/RealPlaceAnalysis/RealPlaceTaylor/CompactHaarRightInvariantInst.lean"
+          edit(rel, "isProbabilityMeasure_map hm.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff hm.aemeasurable).2 inferInstance", 1)
+          edit(rel, "isProbabilityMeasure_map measurable_inv.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff measurable_inv.aemeasurable).2 inferInstance", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE",
+               "set_option maxHeartbeats 8000000 in\nnoncomputable def eGamE", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm).trans\n    (QuotientGroup.quotientKerEquivOfSurjective _ (phiE_surj s))).trans\n    (MulEquiv.prodCongr (eQQ s) (MulEquiv.refl _))",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ := by\n  let e1 : GamE s ≃* (GalL (s + 2) ⧸ (phiE s).ker) :=\n    QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm\n  let e2 : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n    QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)\n  let e3 : (QQ s × ℤˣ × ℤˣ) ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n    MulEquiv.prodCongr (eQQ s) (MulEquiv.refl (ℤˣ × ℤˣ))\n  exact (e1.trans e2).trans e3", 1)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new in [
+              ("Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean",
+               "Finset.prod_le_prod (fun _ _ => by linarith)", "Finset.prod_le_prod₀ (fun _ _ => by linarith)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => zero_le_one)", "Finset.prod_le_prod₀ (fun _ _ => zero_le_one)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => abs_nonneg _)", "Finset.prod_le_prod₀ (fun _ _ => abs_nonneg _)")
+          ]:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/GramBlock.lean","apply Finset.prod_le_one\n","apply Finset.prod_le_one₀\n"],["Formalism/GL3MeanSquares/HookFormulaTorsion/GlobalBoundRefinements.lean","    apply Finset.prod_le_prod\n    · intro ρ hρ","    apply Finset.prod_le_prod₀\n    · intro ρ hρ"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_one (fun j _ => hg0 j _)","Finset.prod_le_one₀ (fun j _ => hg0 j _)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_prod (fun j _ => by split_ifs <;> positivity)","Finset.prod_le_prod₀ (fun j _ => by split_ifs <;> positivity)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        obtain ⟨hc1, hc⟩ := _root_.not_imp.1 hc\n        obtain ⟨hc2, hc⟩ := _root_.not_imp.1 hc","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructA.lean","  rw [hld, logDeriv_mul","  rw [hld]\n  change logDeriv ((fun w : ℂ => (w - ρ) ^ analyticOrderNatAt f ρ) * g) s = _\n  rw [logDeriv_mul"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))","  change logDeriv ((fun z : ℂ => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ)) * h) s = _\n  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))"],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      conv_lhs => rw [e]\n      rw [logDeriv_mul","      conv_lhs => rw [e]\n      change logDeriv ((fun z : ℂ => ∏ w ∈ S, (z - w) ^ m w) * g) z = _\n      rw [logDeriv_mul"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/MeasureEqCovolumeMulVolumeImage.lean","B.equivFunL.lipschitz.isBounded_image","B.equivFunL.toContinuousLinearMap.lipschitz.isBounded_image"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+      - name: Producer | prepare preterminal TopG extraction
+        if: matrix.shard == 'topg'
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RFHTopGBody.lean <<'LEAN'
+          namespace BorghettiRH
+          open Formalism.BasicNotions Formalism.MainNotions GlobalTheory.Fc
+          open UpperTheory.LiteratureTheorems
+          
+          theorem topG_of_literature (O : OpenLiteratureStatements) : UpperTheory.Top.TopG := by
+            let P := published_results_eigen O
+            let F := published_results_first O
+            have hAM := theta_integrals_agree_and_local_matching_of_literature O
+            have hX := (_root_.SelfIntersectionVolumeEstimates.topCovolSlim2_use_alt_alt (_root_.UpperTheory.LiteratureTheorems.resolution_char_zero_of_literature O) (_root_.UpperTheory.LiteratureTheorems.principalisation_char_zero_of_literature O) (_root_.UpperTheory.LiteratureTheorems.poincare_lelong_inv_of_literature O) PositivityTheory.Pf1.HilbertSamuelMoriwaki.hsUse_outright PositivityTheory.Pf1.HilbertSamuelMoriwaki.moriwakiBig_outright (_root_.UpperTheory.LiteratureTheorems.fargues_exact_of_literature O) (_root_.UpperTheory.LiteratureTheorems.zarhin_statement O) (_root_.UpperTheory.LiteratureTheorems.nef_rr_of_literature O) (_root_.UpperTheory.LiteratureTheorems.siegel_toroidal_integral_of_literature O) (_root_.UpperTheory.LiteratureTheorems.toroidal_for_fan_ks_of_literature O) (_root_.UpperTheory.LiteratureTheorems.semi_abelian_lie_seminegative_of_literature O) (_root_.UpperTheory.LiteratureTheorems.point_separation_pair_of_literature O) (_root_.UpperTheory.LiteratureTheorems.ar_degree_of_literature O) (_root_.UpperTheory.LiteratureTheorems.published_results_arithmetic O) (_root_.UpperTheory.LiteratureTheorems.grothendieck_deformation_of_literature O))
+            have hL := local_langlands_gl_recT_exists_of_literature O
+            have hHyps := UpperTheory.Lit.nonempty_hyps_definite_side_of_closed_bound
+              P F hAM.1 hAM.2 hX hL
+              (fun cDep => UpperTheory.N.boundAtTwoThree_linked_of_recT P.nLink
+                (GlobalTheory.Mem.Top.Bl.parametersOfDependence hL cDep))
+            have hG := GlobalTheory.GreenBridge.green_of_regular P.greenRegularCharacters
+            exact hHyps.elim (fun h => GlobalTheory.Fc.forall_goal_of_shape_of_hyps _ _ _ _
+              (UpperTheory.Top.shape_closed_link_n_of_green hG) trivial trivial h)
+          
+          theorem producer_topG : UpperTheory.Top.TopG := by
+            have h := UpperTheory.Gal.Int.galoisLocalGlobalStrong_recParameter
+            exact topG_of_literature ⟨h, UpperTheory.Zero.LLC.recTExists, h⟩
+          
+          #print axioms BorghettiRH.topG_of_literature
+          #print axioms BorghettiRH.producer_topG
+          end BorghettiRH
+          end
+          LEAN
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Development/AutomorphicArithmetic/ThetaCorrespondence/ThetaPairLifts/ThirdPlaceSeries/EveryCharacterOfLiteratureOfVWin.lean")
+          s = p.read_text(encoding="utf-8")
+          marker = "theorem UpperTheory.LiteratureTheorems.every_character_of_literature_of_vWin "
+          assert s.count(marker) == 1 and s.rstrip().endswith("end")
+          prefix = s.split(marker)[0]
+          terminal = "import Development.AutomorphicArithmetic.CharacterBoxes.RiemannHypothesisOfEveryCharacter\n"
+          assert prefix.count(terminal) == 1
+          prefix = prefix.replace(terminal, "")
+          extra = "import Development.AutomorphicArithmetic.ThetaCorrespondence.ThetaPairLifts.ThirdPlaceSeries.TopShape\nimport Development.AutomorphicArithmetic.Foundations.LocalLanglands.LocalCentralUnits.RecTExists\nimport Development.AutomorphicArithmetic.Foundations.GaloisRepresentations.IntegralStructures.RowSrc\n"
+          p.write_text(extra + prefix + Path("RFHTopGBody.lean").read_text(), encoding="utf-8")
+          PY
+      - name: Producer | compile TopG preterminal extraction
+        if: matrix.shard == 'topg'
+        working-directory: upstream/lean
+        timeout-minutes: 180
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Development.AutomorphicArithmetic.ThetaCorrespondence.ThetaPairLifts.ThirdPlaceSeries.EveryCharacterOfLiteratureOfVWin 2>&1 | tee ../../bridge/assembly-logs/producer-topg.log
+      - name: Producer | compile VWin and zeta instance
+        if: matrix.shard == 'vwin'
+        working-directory: upstream/lean
+        timeout-minutes: 180
+        shell: bash
+        run: |
+          set -euo pipefail
+          time lake build Development.AutomorphicArithmetic.AutomorphicVarieties.ModularityArgument.ThresholdArguments.DenseThresholdCases.VwinOfRow Development.AutomorphicArithmetic.Foundations.GaloisRepresentations.IntegralStructures.RowSrc 2>&1 | tee ../../bridge/assembly-logs/producer-vwin-imports.log
+          cat > RFHVWin.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.AutomorphicVarieties.ModularityArgument.ThresholdArguments.DenseThresholdCases.VwinOfRow
+          import Development.AutomorphicArithmetic.Foundations.GaloisRepresentations.IntegralStructures.RowSrc
+          
+          namespace BorghettiRH
+          open Formalism.BasicNotions Formalism.MainNotions UpperTheory.Top
+          theorem producer_vwin : VWin := by
+            exact UpperTheory.One.vwin_of_row UpperTheory.Gal.Int.galoisLocalGlobalStrong_recParameter
+          
+          theorem producer_vwin_zeta : VWinAt PChar.one 401 := by
+            exact producer_vwin PChar.one
+          
+          #print axioms BorghettiRH.producer_vwin
+          #print axioms BorghettiRH.producer_vwin_zeta
+          end BorghettiRH
+          LEAN
+          lake env lean RFHVWin.lean 2>&1 | tee ../../bridge/assembly-logs/producer-vwin.log
+      - name: Producer | require standard axioms
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          shard = "${{ matrix.shard }}"
+          log = Path("../../bridge/assembly-logs/producer-" + shard + ".log").read_text()
+          names = ["topG_of_literature", "producer_topG"] if shard == "topg" else ["producer_vwin", "producer_vwin_zeta"]
+          for n in names:
+              m = re.search(r"BorghettiRH\." + n + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              assert m, "Missing axiom report: " + n
+              axioms = {a.strip() for a in m.group(1).split(",") if a.strip()}
+              assert axioms <= {"propext", "Classical.choice", "Quot.sound"}, (n, axioms)
+              print("VERIFIED", n, sorted(axioms))
+          PY
+      - name: Save compiled modules even after failure
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: upstream/lean/.lake/build
+          key: rh-rfh-producer-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rh-rfh-producer-${{ github.run_id }}-${{ matrix.shard }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
+          retention-days: 14
