@@ -1,0 +1,228 @@
+name: RFH | DUE geometric error transfer
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths:
+      - .github/workflows/rfh-due-geometric-error.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-due-geometric-error
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 45
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-due-geometric-error-4341-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            rfh-normalized-producer-4341-${{ runner.os }}-45581729096
+            rfh-due-geometric-error-4341-${{ runner.os }}-45576972903
+            rfh-normalized-balance-4341-${{ runner.os }}-45570180725
+            rfh-three-modes-4341-${{ runner.os }}-45567876561
+            rfh-normalized-balance-4341-${{ runner.os }}-45567823281
+            rfh-local-balance-4341-${{ runner.os }}-45565368155
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
+            rh-assembly-v2-4341-${{ runner.os }}-
+            b2-incremental-lean4341-${{ runner.os }}-
+      - name: Repair single known compatibility error
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SizeWindowBrackets/ChainSlopeWindows/LipschitzWeightAndMinimum.lean")
+          s = p.read_text()
+          old = "Finset.prod_le_one (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old.replace("prod_le_one", "prod_le_one₀")))
+          PY
+      - name: Compile geometric error lemma
+        working-directory: upstream/lean
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ChTop 2>&1 | tee ../../bridge/assembly-logs/due-geometric-imports.log
+          cat > RFHDueError.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ChTop
+          import Lean.Util.FoldConsts
+          open Finset
+          open Formalism Formalism.D5 Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          
+          theorem topExcess_le_of_gapA {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (N m : ℕ) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (TT : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (B : ℝ) (h : ∀ u : H, gapA D N ell TT a w u ≤ B) :
+              topExcess D N ell TT a w ≤ B := by
+            have hn : (0 : ℝ) < Fintype.card H := by exact_mod_cast Fintype.card_pos
+            have hs : (∑ u : H, gapA D N ell TT a w u) ≤ (Fintype.card H : ℝ) * B := by
+              calc
+                (∑ u : H, gapA D N ell TT a w u) ≤ ∑ _u : H, B :=
+                  Finset.sum_le_sum fun u _ => h u
+                _ = _ := by simp [nsmul_eq_mul]
+            change (1 / (Fintype.card H : ℝ)) * (∑ u : H, gapA D N ell TT a w u) ≤ B
+            calc
+              _ ≤ (1 / (Fintype.card H : ℝ)) * ((Fintype.card H : ℝ) * B) :=
+                mul_le_mul_of_nonneg_left hs (by positivity)
+              _ = B := by field_simp
+          
+          theorem topExcess_le_of_geometric_data
+              {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              {U0 : Type} [Fintype U0] {W : U0 → Type}
+              [∀ u, Fintype (W u)] [∀ u, Nonempty (W u)]
+              {Top : Type} [Fintype Top] {m f : ℕ}
+              (Dd : Data U0 W Top m f) (tr : U0 → H) (C : Consts) (Xpp eK K : ℝ)
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (N : ℕ) (TT T2 : Finset H) (a : H → ℝ)
+              (w : H → Fin m → E0 × H → ℝ)
+              (eT : Top ≃ TT) (eP : Fin f ≃ PhiSet (H := H))
+              (hId : IdentU Dd tr D N ell TT a w eT eP)
+              (hSize : SizeData₂ Dd C Xpp) (hWin : ErrWindows Dd C Xpp eK K)
+              (hBN : BNBoundsU Dd T2) (hLarge : LargeX Dd.x Dd.ε K C.cHH eK)
+              (hCover : Function.Surjective tr) :
+              topExcess D N ell TT a w ≤
+                Dd.x ^ (CErr C * Dd.ε) *
+                  errorBracketSizeWindows Dd.x Dd.ε (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a := by
+            apply topExcess_le_of_gapA D N m ell TT a w
+            intro u
+            obtain ⟨v, rfl⟩ := hCover u
+            exact Deduction.ch_top Dd tr C Xpp eK K D ell N TT T2 a w eT eP hId hSize hWin hBN hLarge v
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.topExcess_le_of_gapA
+          #print axioms BorghettiRH.topExcess_le_of_geometric_data
+          open Lean Elab Command
+          run_cmd do
+            let env ← getEnv
+            let some ci := env.find? ``BorghettiRH.topExcess_le_of_geometric_data | throwError "Missing theorem"
+            let some v := ci.value? (allowOpaque := true) | throwError "No proof term"
+            for dep in [``Deduction.ch_top, ``BorghettiRH.topExcess_le_of_gapA] do
+              unless v.getUsedConstants.contains dep do
+                throwError m!"Missing dependency: {dep}"
+              logInfo m!"VERIFIED_EDGE {dep}"
+          LEAN
+          lake env lean RFHDueError.lean 2>&1 | tee ../../bridge/assembly-logs/due-geometric.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path('../../bridge/assembly-logs/due-geometric.log').read_text()
+          for name in ['BorghettiRH.topExcess_le_of_gapA','BorghettiRH.topExcess_le_of_geometric_data']:
+              m = re.search(re.escape(name) + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              assert m, 'Missing axiom report: ' + name
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in log and log.count('VERIFIED_EDGE') == 2
+          PY
+      - name: Save compiled modules
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-due-geometric-error-4341-${{ runner.os }}-${{ github.run_id }}
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-due-geometric-error-${{ github.run_id }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
+          retention-days: 14
