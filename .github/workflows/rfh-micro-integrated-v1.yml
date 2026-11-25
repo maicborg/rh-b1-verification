@@ -112,6 +112,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-micro-integrated-v1-4341-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            rfh-micro-integrated-v1-4341-Linux-45710014053
             rfh-micro-integrated-v1-4341-Linux-45707577931
             rfh-bridge-resume-v1-4341-Linux-45691176388
             rfh-producer-frontier-v1-4341-Linux-vwin-45683299572
@@ -503,12 +504,20 @@ jobs:
           from pathlib import Path
           p = Path("Formalism/LocalRingCardinality/RankBoundMonotoneInDimension.lean")
           s = p.read_text(encoding='utf-8')
-          edits = [["theorem iotaH_bijective (e : ℕ)","set_option backward.isDefEq.respectTransparency false in\ntheorem iotaH_bijective (e : ℕ)"],["    rw [pow_inj_mod, orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hij","    haveI : CommGroup (HGrp e) := QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n    first\n    | rw [pow_inj_mod] at hij\n    | erw [pow_inj_mod] at hij\n    rw [orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hij"]]
+          edits = [["theorem iotaH_bijective (e : ℕ)","set_option backward.isDefEq.respectTransparency false in\ntheorem iotaH_bijective (e : ℕ)"],["    rw [pow_inj_mod, orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hij\n    exact ZMod.val_injective _ hij","    let g : (ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ) := hcl e (u5 (e + 2))\n    have hg : g ^ i.val = g ^ j.val := by\n      exact hij\n    have hm := (pow_inj_mod (x := g) (n := i.val) (m := j.val)).mp hg\n    have ho : orderOf g = 2 ^ e := by\n      exact orderOf_unit_class_eq_two_pow e\n    rw [ho, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hm\n    exact ZMod.val_injective _ hm"]]
           for old,new in edits:
               assert s.count(old) == 1, (old,s.count(old))
               s = s.replace(old,new)
           p.write_text(s,encoding='utf-8')
           PY
+      - name: Preflight only rank dependency
+        working-directory: upstream/lean
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../../bridge/assembly-logs
+          lake env lean Formalism/LocalRingCardinality/RankBoundMonotoneInDimension.lean 2>&1 | tee ../../bridge/assembly-logs/rank-preflight.log
       - name: Build eight real modules together
         working-directory: upstream/lean
         timeout-minutes: 25
