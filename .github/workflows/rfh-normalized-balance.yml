@@ -1,0 +1,295 @@
+name: RFH | normalized geometry
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths:
+      - .github/workflows/rfh-normalized-balance.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-normalized-balance
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 45
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-normalized-balance-4341-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            rfh-local-balance-4341-${{ runner.os }}-45565368155
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
+            rh-assembly-v2-4341-${{ runner.os }}-
+            b2-incremental-lean4341-${{ runner.os }}-
+      - name: Repair single known compatibility error
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SizeWindowBrackets/ChainSlopeWindows/LipschitzWeightAndMinimum.lean")
+          s = p.read_text()
+          old = "Finset.prod_le_one (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old.replace("prod_le_one", "prod_le_one₀")))
+          PY
+      - name: Build normalized zeta balance targets
+        working-directory: upstream/lean
+        timeout-minutes: 120
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.ConductorsKronecker.CostPropositionBasicBound Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions 2>&1 | tee ../../bridge/assembly-logs/normalized-imports.log
+      - name: Check normalized geometry
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RFHNormalized.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.ConductorsKronecker.CostPropositionBasicBound
+          import Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow
+          import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions
+          import Lean.Util.FoldConsts
+          
+          noncomputable section
+          open Formalism Formalism.D5 Formalism.HC Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Deduction.CH
+          namespace BorghettiRH
+          
+          theorem gz_eq_direct :
+              ∀ y : ℝ, Formalism.Gz y = An.G y ∧ An.G y = Deduction.G y := by
+            intro y
+            have hsum : ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, ArithmeticFunction.vonMangoldt n * (y / (n : ℝ) - 1)
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              apply Finset.sum_congr rfl
+              intro n hn
+              rw [Finset.mem_Icc] at hn
+              have hn1 : (1 : ℝ) ≤ n := by exact_mod_cast hn.1
+              have hy : (n : ℝ) ≤ y := by
+                have hk : 0 < ⌊y⌋₊ := lt_of_lt_of_le Nat.zero_lt_one (le_trans hn.1 hn.2)
+                have hy0 : 0 ≤ y := by
+                  by_contra hneg
+                  push_neg at hneg
+                  rw [Nat.floor_eq_zero.2 (lt_trans hneg zero_lt_one)] at hk
+                  exact lt_irrefl 0 hk
+                exact le_trans (by exact_mod_cast hn.2) (Nat.floor_le hy0)
+              have hpos : (0 : ℝ) < n := by linarith
+              have : 0 ≤ y / (n : ℝ) - 1 := by
+                rw [sub_nonneg, le_div_iff₀ hpos, one_mul]
+                exact hy
+              rw [max_eq_left this]
+            have hre : (Deduction.ramp (fun _ => 1) y).re
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              have hsub : Finset.Icc 1 ⌊y⌋₊ ⊆ Finset.range (⌊y⌋₊ + 1) := by
+                intro n hn
+                rw [Finset.mem_Icc] at hn
+                rw [Finset.mem_range]
+                omega
+              rw [Finset.sum_subset hsub]
+              · simp [Deduction.ramp, Complex.re_sum]
+              · intro n hn hn'
+                have h0 : n = 0 := by
+                  rw [Finset.mem_range] at hn
+                  rw [Finset.mem_Icc] at hn'
+                  omega
+                subst h0
+                simp
+            refine ⟨?_, ?_⟩
+            · simp only [Formalism.Gz, Formalism.Sz, An.G]
+              rw [hsum]
+              ring
+            · simp only [An.G, Deduction.G]
+              rw [hre]
+              ring
+          
+          theorem normalize_balance (P δ x Err g a : ℝ)
+              (hP : 0 < P) (hd : 0 < δ) (hx : 0 < x)
+              (h : P * (δ / 2) * (g - a) ≤ Err + 2 * P / x) :
+              g ≤ Err / (P * (δ / 2)) + a + 4 / (δ * x) := by
+            have hB : 0 < P * (δ / 2) := by positivity
+            have h1 : g - a ≤ (Err + 2 * P / x) / (P * (δ / 2)) := by
+              apply (le_div_iff₀ hB).2
+              simpa only [mul_comm (g - a)] using h
+            have h2 : (Err + 2 * P / x) / (P * (δ / 2)) =
+                Err / (P * (δ / 2)) + 4 / (δ * x) := by
+              field_simp [ne_of_gt hP, ne_of_gt hd, ne_of_gt hx]
+              <;> ring
+            rw [h2] at h1
+            linarith
+          
+          theorem normalized_actual {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (S : Finset ℕ) (hD : HostFactsS D S)
+              (ell : AddChar (E0 × H) ℂ → ℂ) (N m : ℕ)
+              (TT T2 : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (x eps b b' η X' θ Cd CL : ℝ)
+              (hH : GrowthInequalityHypotheses D ell N TT T2 a w x eps b b' η X' θ Cd CL (topExcess D N ell TT a w))
+              (hS : SmallCosts x eps (fPl H) b η θ Cd CL)
+              (hP : 0 < (TT.card : ℝ) * m * b) (hd : 0 < delta2 T2) :
+              Deduction.G x ≤ topExcess D N ell TT a w / ((TT.card : ℝ) * m * b * (delta2 T2 / 2)) +
+                4 * x ^ ((1 : ℝ) / 2 + eps) + 4 / (delta2 T2 * x) := by
+            have h := UpperTheory.GL.card_mul_delta_le_err D S hD ell N m TT T2 a w x eps b b' η X' θ Cd CL
+              (topExcess D N ell TT a w) hH hS
+            have hx : 0 < x := by linarith [hH.1]
+            rw [(gz_eq_direct x).1, (gz_eq_direct x).2] at h
+            exact normalize_balance _ _ _ _ _ _ hP hd hx h
+          
+          theorem absorb_normalized (C eps : ℝ) (hC : 0 ≤ C) (he : 0 < eps) :
+              ∃ X : ℝ, ∀ x ≥ X, ∀ (g R : ℝ),
+                g ≤ R + 4 * x ^ ((1 : ℝ) / 2 + eps) →
+                R ≤ x ^ ((1 : ℝ) / 2 + C * eps) →
+                g ≤ x ^ ((1 : ℝ) / 2 + (C + 2) * eps) := by
+            obtain ⟨X,hX⟩ := Filter.eventually_atTop.1
+              ((tendsto_rpow_atTop he).eventually_ge_atTop (5 : ℝ))
+            refine ⟨max 1 X, ?_⟩
+            intro x hx g R hg hR
+            have hx1 : 1 ≤ x := (le_max_left _ _).trans hx
+            have hx0 : 0 < x := zero_lt_one.trans_le hx1
+            have h1 : x ^ ((1 : ℝ) / 2 + eps) ≤ x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+              Real.rpow_le_rpow_of_exponent_le hx1 (by nlinarith)
+            have h2 : x ^ ((1 : ℝ) / 2 + C*eps) ≤ x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+              Real.rpow_le_rpow_of_exponent_le hx1 (by nlinarith)
+            calc
+              g ≤ 5 * x ^ ((1 : ℝ) / 2 + (C+1)*eps) := by linarith
+              _ ≤ x ^ eps * x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+                mul_le_mul_of_nonneg_right (hX x ((le_max_right _ _).trans hx)) (Real.rpow_nonneg hx0.le _)
+              _ = x ^ ((1 : ℝ) / 2 + (C+2)*eps) := by
+                rw [← Real.rpow_add hx0]
+                congr 1
+                ring
+          
+          #print axioms BorghettiRH.gz_eq_direct
+          #print axioms BorghettiRH.normalize_balance
+          #print axioms BorghettiRH.normalized_actual
+          #print axioms BorghettiRH.absorb_normalized
+          end BorghettiRH
+          
+          open Lean Elab Command
+          run_cmd do
+            let env ← getEnv
+            let some ci := env.find? ``BorghettiRH.normalized_actual | throwError "Missing actual theorem"
+            let some v := ci.value? (allowOpaque := true) | throwError "Missing proof term"
+            for dep in [``UpperTheory.GL.card_mul_delta_le_err, ``BorghettiRH.normalize_balance, ``BorghettiRH.gz_eq_direct] do
+              unless v.getUsedConstants.contains dep do
+                throwError "Missing actual edge: {dep}"
+              logInfo m!"VERIFIED_EDGE normalized_actual -> {dep}"
+          LEAN
+          lake env lean RFHNormalized.lean 2>&1 | tee ../../bridge/assembly-logs/normalized.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = Path("../../bridge/assembly-logs/normalized.log").read_text()
+          for name in ["gz_eq_direct", "normalize_balance", "normalized_actual", "absorb_normalized"]:
+              m = re.search(r"BorghettiRH\." + name + r"' depends on axioms:\s*\[([^\]]*)\]", log)
+              assert m, name
+              assert {a.strip() for a in m.group(1).split(",") if a.strip()} <= {"propext", "Classical.choice", "Quot.sound"}
+          assert log.count("VERIFIED_EDGE normalized_actual ->") == 3
+          PY
+      - name: Save compiled modules
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-normalized-balance-4341-${{ runner.os }}-${{ github.run_id }}
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-normalized-balance-${{ github.run_id }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
+          retention-days: 14
