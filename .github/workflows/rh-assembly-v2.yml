@@ -124,6 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45595900725
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45581705857
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45578450166
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45575466969
@@ -498,6 +499,15 @@ jobs:
               assert t.count(old) == count, f'Unexpected pinned block: {rel}'
               p.write_text(t.replace(old, new), encoding='utf-8')
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","  refine Prod.ext ?_ h2","  refine Prod.ext ?_ (by first | exact h2 | exact mul_right_cancel h2)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","    rw [galE_mul hqd h, galE_mul hqd h, mul_comm]","    rw [galE_mul hqd h, galE_mul hqd h]\n    exact mul_comm _ _",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","rw [isIntegral_algebraMap_iff (algebraMap (KinE ζ a b) (hostE ζ a b)).injective]","rw [isIntegral_algHom_iff (IsScalarTower.toAlgHom ℤ (KinE ζ a b) (hostE ζ a b))\n      (algebraMap (KinE ζ a b) (hostE ζ a b)).injective]",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","(show c0 * c0 = (1 : G0) by decide) (mul_one _)","(show c0 * c0 = (1 : G0) by decide) (by\n      change (1 : HGrp e) * 1 = 1\n      exact mul_one _)",1],["Formalism/SharpRestriction/LevelLetterCocycles/QuotientHomNonvanishingBound.lean","MvPolynomial.coeff d (Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C))","(Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C)).coeff d",1],["Formalism/LocalRingCardinality/DataKerI.lean","MvPolynomial.coeff μ P","P.coeff μ",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
           cat > RHGate3ACoeffProbe.lean <<'LEAN'
           import Mathlib.Algebra.MvPolynomial.Basic
           local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
@@ -525,6 +535,7 @@ jobs:
           lake build Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour 2>&1 | tee ../../bridge/assembly-logs/gate3a-two-module-preflight.log
           lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.NablaLLe Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.CoprimeTwoPow Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.FrobMulInertia 2>&1 | tee ../../bridge/assembly-logs/gate3a-next-preflight.log
           lake build Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.CardExtendedGaloisGroup Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.CardTrivialFirstComponent Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.Decomp Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.Orbits Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.Inertia Formalism.GradedWeylDivisibility.StatementE Formalism.SharpRestriction.LevelLetterCocycles.DataN 2>&1 | tee ../../bridge/assembly-logs/gate3a-seven-preflight.log
+          lake build Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.OrbitSg Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.Principal Formalism.SharpRestriction.LevelLetterCocycles.QuotientHomNonvanishingBound Formalism.LocalRingCardinality.DataKerI 2>&1 | tee ../../bridge/assembly-logs/gate3a-four-preflight.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
