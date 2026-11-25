@@ -113,6 +113,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-normalized-producer-4341-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            rfh-normalized-producer-4341-${{ runner.os }}-45576972903
             rfh-normalized-balance-4341-${{ runner.os }}-45570180725
             rfh-three-modes-4341-${{ runner.os }}-45567876561
             rfh-normalized-balance-4341-${{ runner.os }}-45567823281
@@ -384,10 +385,7 @@ jobs:
             refine ⟨X,?_⟩
             intro x hx h
             obtain ⟨H, hA, hF, hDec, D,S,ell,N,m,TT,T2,a,w,b,b',η,X',θ,Cd,CL,hD,hH,hS,hP,hd,hR⟩ := h
-            haveI := hA
-            haveI := hF
-            haveI := hDec
-            have hg := normalized_actual D S hD ell N m TT T2 a w x eps b b' η X' θ Cd CL hH hS hP hd
+            have hg := @normalized_actual H hA hF hDec D S hD ell N m TT T2 a w x eps b b' η X' θ Cd CL hH hS hP hd
             apply hX x hx (Deduction.G x) _ _ hR
             linarith
           
