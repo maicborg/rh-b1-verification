@@ -322,6 +322,12 @@ jobs:
                   i += 1
               compat = """local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
 
+          private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            change (p + q).coeff m = p.coeff m + q.coeff m
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
           private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
             (m : σ →₀ ℕ) : AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m = 0 := by
             simp
@@ -358,7 +364,20 @@ jobs:
                   if p.name not in coeff_names:
                       continue
                   old = p.read_text(encoding="utf-8")
-                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "MvPolynomial.coeff_add", old)
+                  if p.name == "FockPerm.lean":
+                      helper = """private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            (p + q).coeff m = p.coeff m + q.coeff m := by
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          """
+                      lines = old.splitlines(keepends=True)
+                      i = 0
+                      while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                          i += 1
+                      lines.insert(i, helper)
+                      old = ''.join(lines)
+                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "rhCompatCoeffAdd", old)
                   if new != old:
                       p.write_text(new, encoding="utf-8")
                       print("Qualified coefficient lemma:", p)
@@ -389,9 +408,17 @@ jobs:
           local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
           example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) :
               rhCompatCoeff m (0 : MvPolynomial σ R) = 0 := by simp
+          private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            change (p + q).coeff m = p.coeff m + q.coeff m
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
           example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
               rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
-            rw [MvPolynomial.coeff_add]
+            rw [rhCompatCoeffAdd]
+          example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+              (p + q).coeff m = p.coeff m + q.coeff m := by
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
           LEAN
           lake env lean RHGate3ACoeffProbe.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-probe.log
           read -r -a targets <<< "$RH_TARGETS"
