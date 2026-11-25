@@ -1,0 +1,97 @@
+name: RFH | Micro 001 - shared derivative API
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths: [.github/workflows/rfh-micro-001-cocycle.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-micro-001-cocycle
+  cancel-in-progress: false
+jobs:
+  single-module:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: src/ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/CocycleRightZeroThd.lean
+      - name: Install pinned Lean
+        working-directory: upstream/lean
+        timeout-minutes: 5
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Get Mathlib only
+        working-directory: upstream/lean
+        timeout-minutes: 12
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Patch two exact pderiv calls
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p micro-logs
+          cp ../../alpoge/src/ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/CocycleRightZeroThd.lean RFHMicro001.lean
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("RFHMicro001.lean")
+          s = p.read_text()
+          old = "pderiv R "
+          new = "MvPowerSeries.pderiv (R := R) "
+          assert s.count(old) == 2
+          assert [l for l in s.splitlines() if l.startswith("import ")] == ["import Mathlib"]
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Verify exactly one file (no lake build)
+        working-directory: upstream/lean
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > MicroAPI.lean <<'LEAN'
+          import Mathlib
+          #check @MvPowerSeries.pderiv
+          LEAN
+          lake env lean MicroAPI.lean | tee micro-logs/api.log
+          lake env lean -o RFHMicro001.olean RFHMicro001.lean 2>&1 | tee micro-logs/module.log
+          cat >> RFHMicro001.lean <<'LEAN'
+          #print axioms ReciprocityTheory.ChartRestriction.G.Geo.Tor.Germ.Dof
+          #print axioms ReciprocityTheory.ChartRestriction.G.Geo.Tor.Germ.FB.triv
+          LEAN
+          lake env lean RFHMicro001.lean 2>&1 | tee micro-logs/audit.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path("micro-logs/audit.log").read_text()
+          for n in ["Dof","FB.triv"]:
+              m = re.search(re.escape(n)+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              if not m:
+                  assert re.search(re.escape(n)+r"' does not depend on any axioms",s),n
+              else:
+                  assert {x.strip() for x in m.group(1).split(",") if x.strip()} <= {"propext","Classical.choice","Quot.sound"}
+          assert "sorryAx" not in s
+          PY
+      - name: Preserve micro diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-micro-001-${{ github.run_id }}
+          path: upstream/lean/micro-logs/
+          if-no-files-found: ignore
