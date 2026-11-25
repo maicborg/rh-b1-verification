@@ -113,8 +113,8 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-due-normalized-error-4341-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            rfh-due-normalized-error-4341-${{ runner.os }}-45613415685
             rfh-due-geometric-error-4341-${{ runner.os }}-45608401836
-            rfh-normalized-producer-4341-${{ runner.os }}-45581729096
             rfh-due-normalized-error-4341-${{ runner.os }}-45576972903
             rfh-normalized-balance-4341-${{ runner.os }}-45570180725
             rfh-three-modes-4341-${{ runner.os }}-45567876561
@@ -172,6 +172,10 @@ jobs:
             have hbal : (nT : ℝ) * m * b * (((nT2 : ℝ) / n) / 2) *
                 ((R + 4 * X) - 4 * x ^ ((1 : ℝ) / 2 + eps)) ≤
                   E + 2 * (nT : ℝ) * m * b / x := by
+              have hAssoc : 2 * (nT : ℝ) * m * b / x = 2 * P / x := by
+                dsimp only [P]
+                ring
+              rw [hAssoc]
               change P * (δ / 2) * ((R + 4 * X) - 4 * X) ≤ E + 2 * P / x
               rw [add_sub_cancel_right]
               have hEq : P * (δ / 2) * R = E + 2 * P / x := by
