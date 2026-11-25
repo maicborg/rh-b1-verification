@@ -548,15 +548,7 @@ jobs:
           assert s.count(marker) == 1
           s = s.replace(marker, "set_option backward.isDefEq.respectTransparency false in\n" + marker, 1)
           old = "      exact ⟨⟨D.eta.rangeRestrict u, hu⟩, rfl⟩"
-          new = """      have hx : D.eta.rangeRestrict u ∈ D.p1.ker := by
-                  apply MonoidHom.mem_ker.mpr
-                  change D.cl u = 1
-                  exact MonoidHom.mem_ker.mp hu
-                refine ⟨(⟨D.eta.rangeRestrict u, hx⟩ : D.p1.ker), ?_⟩
-                apply Subtype.ext
-                change D.ξ u = D.ξ u
-                rfl"""
-          new = "\n".join([new.splitlines()[0]] + [line[10:] for line in new.splitlines()[1:]])
+          new = "\n".join(["      have hx : D.eta.rangeRestrict u ∈ D.p1.ker := by","        apply MonoidHom.mem_ker.mpr","        change D.cl u = 1","        exact MonoidHom.mem_ker.mp hu","      refine ⟨(⟨D.eta.rangeRestrict u, hx⟩ : D.p1.ker), ?_⟩","      apply Subtype.ext","      change D.ξ u = D.ξ u","      rfl"])
           assert s.count(old) == 1
           p.write_text(s.replace(old, new, 1))
           PY
