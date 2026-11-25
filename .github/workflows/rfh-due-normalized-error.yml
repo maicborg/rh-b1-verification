@@ -122,7 +122,6 @@ jobs:
             rfh-local-balance-4341-${{ runner.os }}-45565368155
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
             rh-assembly-v2-4341-${{ runner.os }}-
-            b2-incremental-lean4341-${{ runner.os }}-
       - name: Repair single known compatibility error
         working-directory: upstream/lean
         run: |
