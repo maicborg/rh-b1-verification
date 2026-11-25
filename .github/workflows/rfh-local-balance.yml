@@ -113,9 +113,22 @@ jobs:
           path: upstream/lean/.lake/build
           key: rfh-local-balance-4341-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
+            rfh-normalized-balance-4341-${{ runner.os }}-45567823281
+            rfh-local-balance-4341-${{ runner.os }}-45565368155
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
             rh-assembly-v2-4341-${{ runner.os }}-
             b2-incremental-lean4341-${{ runner.os }}-
+      - name: Apply verified Lipschitz product API repair
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SizeWindowBrackets/ChainSlopeWindows/LipschitzWeightAndMinimum.lean")
+          s = p.read_text()
+          old = "Finset.prod_le_one (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)"
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old.replace("prod_le_one", "prod_le_one₀")))
+          PY
       - name: Build only local balance targets
         working-directory: upstream/lean
         timeout-minutes: 120
