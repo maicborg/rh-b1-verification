@@ -124,6 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45578450166
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45575466969
             rh-assembly-v2-4341-${{ runner.os }}-integrated-45570323625
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
@@ -478,6 +479,15 @@ jobs:
               assert t.count(old) == count, f"Unexpected pinned block: {rel}"
               p.write_text(t.replace(old, new), encoding="utf-8")
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLLe.lean","coeff d P","P.coeff d",3],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","(by simp [sq])) (by simp [sq])","(by simp [sq])) (by\n      simp [sq] <;> first\n        | rfl\n        | exact (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).mul_one 1)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","ZMod.lift (2 ^ e) ⟨f0, hf0⟩","ZMod.lift (2 ^ e) (A := Additive (HGrp e)) ⟨f0, hf0⟩",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/FrobMulInertia.lean","    have := hmulE 1 1\n    rw [mul_one] at this\n    exact (mul_eq_left.mp this.symm)","    have := hmulE 1 1\n    rw [mul_one] at this\n    apply Prod.ext\n    · apply Prod.ext\n      · have h1 := congrArg (fun g => g.1.1) this\n        change (galE e ζ a b 1).1.1 = _ * _ at h1\n        exact left_eq_mul.mp h1\n      · have h2 := congrArg (fun g => g.1.2) this\n        change (galE e ζ a b 1).1.2 = _ * _ at h2\n        exact left_eq_mul.mp h2\n    · have h3 := congrArg Prod.snd this\n      letI : Group (HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : HGrp e := (galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      have hz1 : z = 1 := by\n        simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm\n      first\n      | simpa only [Prod.snd_one, z] using hz1\n      | change z = (1 : HGrp e)\n        exact hz1\n      | rw [Prod.snd_one]\n        exact hz1",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
           cat > RHGate3ACoeffProbe.lean <<'LEAN'
           import Mathlib.Algebra.MvPolynomial.Basic
           local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
@@ -503,6 +513,7 @@ jobs:
           lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas 2>&1 | tee ../../bridge/assembly-logs/coeff-real-probe.log
           # Only the two remaining failed modules: test actual source before expanding closure.
           lake build Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour 2>&1 | tee ../../bridge/assembly-logs/gate3a-two-module-preflight.log
+          lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.NablaLLe Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.CoprimeTwoPow Formalism.FrobeniusOrbits.FrobeniusOrbitsProofs.FrobMulInertia 2>&1 | tee ../../bridge/assembly-logs/gate3a-next-preflight.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
