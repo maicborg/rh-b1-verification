@@ -1,0 +1,525 @@
+name: RFH | Micro batch 002-008 - isolated modules
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths: [.github/workflows/rfh-micro-batch-002-008.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-micro-batch-002-008
+  cancel-in-progress: false
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        target: ['002-anyframe', '003-algebramap', '004-height', '005-moebius', '006-dvr', '007-abproj', '008-unitary']
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 12
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        if: matrix.target != '003-algebramap' && matrix.target != '004-height'
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-micro-batch-002-008-4341-${{ runner.os }}-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ matrix.target == '002-anyframe' && 'rfh-bridge-resume-v1-4341-Linux-45691176388' || 'rfh-producer-frontier-v1-4341-Linux-topg-45683299572' }}
+            rfh-producer-frontier-v1-4341-Linux-vwin-45683299572
+            rfh-producer-frontier-v1-4341-Linux-topg-45683299572
+            rfh-bridge-resume-v1-4341-Linux-45691176388
+      - name: Gate 3A | restore geometric imports and elaborate cokernel
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Development/AutomorphicArithmetic/CharacterBoxes/TwistForm.lean')
+          s = p.read_text(encoding='utf-8')
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.PairGood\n'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old + 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n', 1), encoding='utf-8')
+          p = Path('Formalism/GaloisCohomology/Statement.lean')
+          s = p.read_text(encoding='utf-8')
+          old = '''def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=
+            PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          new = '''set_option backward.isDefEq.respectTransparency false in
+          def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop := by
+            letI : ∀ v : D.S, AddCommGroup (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : ∀ v : D.S, Module ℤ_[l] (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : AddCommGroup (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.addCommGroup
+            letI : Module ℤ_[l] (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.module _ _ _
+            exact PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          assert s.count(old) == 1, 'Unexpected pinned PTCokerAt block'
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Apply verified historical compatibility patches
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          patches = [["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","by convert hmq'; exact Subsingleton.elim _ _","by convert hmq' <;> exact Subsingleton.elim _ _"],["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","      convert this using 1\n      norm_num","      convert this using 1 <;> norm_num"],["Formalism/LatticeTheta/LatticeThetaProofs/LatticeSummableDecay.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/AdaptedBasis.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/LatticeSlopes/LatticeSlopesProofs/FiniteSaturated.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Ipindep.lean","(DoubleCoset.eq _ _ (s c) (s' c)).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g (Quotient.out (DoubleCoset.mk K K g))).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K s (Quotient.out c)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g ((a : G) * g * b)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K (Quotient.out (DoubleCoset.mk K K g)) g).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","(DoubleCoset.eq Γ K (s (DoubleCoset.mk Γ K g)) g).1","DoubleCoset.eq.mp"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","Finset.prod_le_prod (fun i _ => Finset.sum_nonneg","Finset.prod_le_prod₀ (fun i _ => Finset.sum_nonneg"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","        refine (hPSD.dotProduct_mulVec_zero_iff v).mp ?_\n        rw [star_trivial]\n        exact heq.symm","        exact hPSD.dotProduct_mulVec_zero_iff.mp (by simpa only [star_trivial] using heq.symm)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_prod (fun i _ => hnn i)","Finset.prod_le_prod₀ (fun i _ => hnn i)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","(hG.dotProduct_mulVec_zero_iff _).mp","hG.dotProduct_mulVec_zero_iff.mp"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_one (fun c _ => hcol0 c)","Finset.prod_le_one₀ (fun c _ => hcol0 c)"],["Formalism/TameInertiaTowers/CentralOrderTwo/Groups.lean","Finset.prod_le_prod (fun _ _ => Nat.zero_le _) (fun i _ => hfin i)","Finset.prod_le_prod (fun i _ => hfin i)"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply]"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add, star_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply, star_add]"],["Formalism/GradedWeylDivisibility/StatementC.lean","(coeff m g)","(g.coeff m)"]]
+          for rel, old, new in patches:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, f'Unexpected compatibility block: {rel}'
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('Gate3A API compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          edits = [["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n    (DoubleCoset.out_eq' K K _).symm","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp\n    (DoubleCoset.out_eq' _).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' K K c)","((DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' c)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, rfl⟩).symm","((DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr ⟨a, a.2, b, b.2, rfl⟩).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n        (DoubleCoset.out_eq' K K (DoubleCoset.mk K K g))","(DoubleCoset.eq (H := K) (K := K) (a := Quotient.out (DoubleCoset.mk K K g)) (b := g)).mp\n        (DoubleCoset.out_eq' (DoubleCoset.mk K K g))"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","have h := DoubleCoset.eq.mp (hs _)","have h := (DoubleCoset.eq (H := Γ) (K := K) (a := s (DoubleCoset.mk Γ K g)) (b := g)).mp (hs (DoubleCoset.mk Γ K g))"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","AddMonoidAlgebra.coeff_add, Pi.add_apply","MvPolynomial.coeff_add"],["Formalism/FormalGroupLog/Statement.lean","MvPowerSeries.pderiv K i","MvPowerSeries.pderiv (R := K) i"],["Formalism/SharpRestriction/LevelLetterCocycles/DataNLoc.lean","PowerSeries.derivative LL E","PowerSeries.derivative (R := LL) E"],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","noncomputable def eGamE","set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelLead.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaTallZero.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwlineLemmas.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/DualWeylModuleStable.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Wlocal.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/HWLine.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDbasisLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDrowLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDlatLemmas.lean"]
+          for rel in coeff_files:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              # Restore the former coefficient argument order using a reducible alias.
+              # Preserve the two partial applications and the named-argument generalize.
+              if rel.endswith(("LNondomLemmas.lean", "Wlocal.lean", "LDlatLemmas.lean")):
+                  assert s.count("congrArg (coeff m)") == 1
+                  s = s.replace("congrArg (coeff m)", "congrArg (fun p => AddMonoidAlgebra.coeff p m)")
+              if rel.endswith("LDbasisLemmas.lean"):
+                  old = "congrArg (MvPolynomial.coeff (o.degree (v j)))"
+                  assert s.count(old) == 1
+                  s = s.replace(old, "congrArg (fun p => AddMonoidAlgebra.coeff p (o.degree (v j)))")
+              if rel.endswith("LHwinLemmas.lean"):
+                  assert s.count("congrArg (coeff d)") == 1
+                  s = s.replace("congrArg (coeff d)", "congrArg (fun p => AddMonoidAlgebra.coeff p d)")
+              if rel.endswith("LinSubstIsHomogeneous.lean"):
+                  assert s.count("coeff (R := O) (σ := n) α _") == 1
+                  s = s.replace("coeff (R := O) (σ := n) α _", "AddMonoidAlgebra.coeff (_ : MvPolynomial n O) α")
+              s = re.sub(r"(?<![\w.])coeff(?![\w'])", "rhCompatCoeff", s)
+              s = re.sub(r"(?<![\w.])coeff_zero(?![\w'])", "rhCompatCoeffZero", s)
+              lines = s.splitlines(keepends=True)
+              i = 0
+              while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                  i += 1
+              compat = """local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
+
+          private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            change (p + q).coeff m = p.coeff m + q.coeff m
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) : AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m = 0 := by
+            simp
+
+          """
+              lines.insert(i, compat)
+              p.write_text(''.join(lines), encoding='utf-8')
+              print('Gate3A coefficient compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GL3MeanSquares/ModelCocycleExponent.lean","PowerSeries.derivative K","PowerSeries.derivative (R := K)",2],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DeterminantCauchySchwarz.lean","Finset.prod_le_prod (fun _ _ => zero_le_one)","Finset.prod_le_prod₀ (fun _ _ => zero_le_one)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ExistsInterpolationExteriorSmallCoeffs.lean","Finset.prod_le_one (fun i _ => norm_nonneg _)","Finset.prod_le_one₀ (fun i _ => norm_nonneg _)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","exact prod_le_one (fun c' _ => (hind c' _).1)","exact prod_le_one₀ (fun c' _ => (hind c' _).1)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun c' _ => ?_)","refine prod_le_prod₀ (fun c' _ => ?_)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun j _ => ?_)","refine prod_le_prod₀ (fun j _ => ?_)",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, f'Unexpected third compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          coeff_roots = [
+              Path("Formalism/GradedWeylDivisibility/FockSpaceTableaux"),
+              Path("Formalism/SatakeDualWeyl/AdelicIwasawaHecke"),
+              Path("Formalism/FockGram/FockGramProofs")
+          ]
+          # Limit changes to files with the old coefficient lemma in the failed closure.
+          coeff_names = {"LNondomLemmas.lean", "LGradedLemmas.lean", "FockPerm.lean",
+              "LRowstLemmas.lean", "LCcompLemmas.lean", "LCpleadLemmas.lean",
+              "FockDiagBound.lean", "LeadInterlaced.lean", "LHwinLemmas.lean",
+              "PeelHomog.lean", "LinSubstIsHomogeneous.lean"}
+          for root in coeff_roots:
+              for p in root.glob("*.lean"):
+                  if p.name not in coeff_names:
+                      continue
+                  old = p.read_text(encoding="utf-8")
+                  if p.name == "FockPerm.lean":
+                      helper = """private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            (p + q).coeff m = p.coeff m + q.coeff m := by
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          """
+                      lines = old.splitlines(keepends=True)
+                      i = 0
+                      while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                          i += 1
+                      lines.insert(i, helper)
+                      old = ''.join(lines)
+                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "rhCompatCoeffAdd", old)
+                  if new != old:
+                      p.write_text(new, encoding="utf-8")
+                      print("Qualified coefficient lemma:", p)
+          def edit(rel, old, new, count):
+              p = Path(rel)
+              s = p.read_text(encoding="utf-8")
+              assert s.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(s.replace(old, new), encoding="utf-8")
+              print("Gate3A targeted compatibility:", rel)
+          rel = "Formalism/TameInertiaTowers/CentralOrderTwo/MemDecompositionSubgroupIff.lean"
+          for zp in ["zpowers", "Subgroup.zpowers"]:
+              edit(rel, f"(powMonoidHom 2 : (GalL n ⧸ {zp} (JJ n)) →* _).range",
+                   f"(powMonoidHom (α := GalL n ⧸ {zp} (JJ n)) 2).range", 2)
+          rel = "Formalism/RealPlaceAnalysis/RealPlaceTaylor/CompactHaarRightInvariantInst.lean"
+          edit(rel, "isProbabilityMeasure_map hm.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff hm.aemeasurable).2 inferInstance", 1)
+          edit(rel, "isProbabilityMeasure_map measurable_inv.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff measurable_inv.aemeasurable).2 inferInstance", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE",
+               "set_option maxHeartbeats 8000000 in\nnoncomputable def eGamE", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm).trans\n    (QuotientGroup.quotientKerEquivOfSurjective _ (phiE_surj s))).trans\n    (MulEquiv.prodCongr (eQQ s) (MulEquiv.refl _))",
+               "private noncomputable def eGamE₁ (s : ℕ) : GamE s ≃* (GalL (s + 2) ⧸ (phiE s).ker) :=\n  QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm\n\nset_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamE₂ (s : ℕ) : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n  QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)\n\nprivate noncomputable def eGamE₃ (s : ℕ) : (QQ s × ℤˣ × ℤˣ) ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  MulEquiv.prodCongr (eQQ s) (MulEquiv.refl (ℤˣ × ℤˣ))\n\nset_option maxHeartbeats 4000000 in\nnoncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((eGamE₁ s).trans (eGamE₂ s)).trans (eGamE₃ s)", 1)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new in [
+              ("Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean",
+               "Finset.prod_le_prod (fun _ _ => by linarith)", "Finset.prod_le_prod₀ (fun _ _ => by linarith)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => zero_le_one)", "Finset.prod_le_prod₀ (fun _ _ => zero_le_one)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => abs_nonneg _)", "Finset.prod_le_prod₀ (fun _ _ => abs_nonneg _)")
+          ]:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/GramBlock.lean","apply Finset.prod_le_one\n","apply Finset.prod_le_one₀\n"],["Formalism/GL3MeanSquares/HookFormulaTorsion/GlobalBoundRefinements.lean","    apply Finset.prod_le_prod\n    · intro ρ hρ","    apply Finset.prod_le_prod₀\n    · intro ρ hρ"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_one (fun j _ => hg0 j _)","Finset.prod_le_one₀ (fun j _ => hg0 j _)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_prod (fun j _ => by split_ifs <;> positivity)","Finset.prod_le_prod₀ (fun j _ => by split_ifs <;> positivity)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        obtain ⟨hc1, hc⟩ := _root_.not_imp.1 hc\n        obtain ⟨hc2, hc⟩ := _root_.not_imp.1 hc","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructA.lean","  rw [hld, logDeriv_mul","  rw [hld]\n  change logDeriv ((fun w : ℂ => (w - ρ) ^ analyticOrderNatAt f ρ) * g) s = _\n  rw [logDeriv_mul"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))","  change logDeriv ((fun z : ℂ => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ)) * h) s = _\n  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))"],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      conv_lhs => rw [e]\n      rw [logDeriv_mul","      conv_lhs => rw [e]\n      change logDeriv ((fun z : ℂ => ∏ w ∈ S, (z - w) ^ m w) * g) z = _\n      rw [logDeriv_mul"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/MeasureEqCovolumeMulVolumeImage.lean","B.equivFunL.lipschitz.isBounded_image","B.equivFunL.toContinuousLinearMap.lipschitz.isBounded_image"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/FinSup.lean","import Formalism.HarderNarasimhan.DegSupermodZ","import Formalism.HarderNarasimhan.DegSupermodZ\nimport Mathlib.Order.CompactlyGenerated.Basic",1],["Formalism/HermitianLattices/HermitianLatticesProofs/ShortVectors.lean","Finset.prod_le_prod (fun i _ => hc.le)","Finset.prod_le_prod₀ (fun i _ => hc.le)",1],["Formalism/HarderNarasimhan/HarderNarasimhanProofs/PlaceSplit.lean","(DistribMulAction.toLinearMap ℝ (ι → ℂ) (v.embedding (c : K)))","({ toFun := fun w => v.embedding (c : K) • w\n             map_add' := fun x y => smul_add _ _ _\n             map_smul' := fun a w => by\n               change v.embedding (c : K) • (a • w) = a • (v.embedding (c : K) • w)\n               exact smul_comm _ _ _ } : (ι → ℂ) →ₗ[ℝ] (ι → ℂ))",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructC.lean","    rw [h1, logDeriv_mul","    rw [h1]\n    change logDeriv (LFunction χ) s = logDeriv ((fun z : ℂ => z - 1) * LFunction χ) s - del1 χ / (s - 1)\n    rw [logDeriv_mul",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [h6]\n  refine Finset.sum_congr","  rw [Finset.prod_fn] at h6\n  rw [h6]\n  refine Finset.sum_congr",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      rw [logDeriv_prod (f := fun w z => (z - w) ^ m w) (fun w hw => pow_ne_zero _ (hzw w hw))\n        (fun w hw => by fun_prop)]","      have hp := logDeriv_prod (f := fun w z => (z - w) ^ m w) (fun w hw => pow_ne_zero _ (hzw w hw))\n        (fun w hw => by fun_prop)\n      rw [Finset.prod_fn] at hp\n      rw [hp]",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/RayClassIdealCountEqNcardShiftedBinaryForm.lean","Equiv.setCongr hr","Set.equivOfEq hr",2],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/RayClassIdealCountEqNcardShiftedBinaryForm.lean","Equiv.setCongr_apply","Set.equivOfEq_apply",2],["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","    exact left_eq_mul.mp h","    apply Prod.ext\n    · apply Prod.ext\n      · have h1 := congrArg (fun g => g.1.1) h\n        change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).1.1 = _ * _ at h1\n        exact left_eq_mul.mp h1\n      · have h2 := congrArg (fun g => g.1.2) h\n        change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).1.2 = _ * _ at h2\n        exact left_eq_mul.mp h2\n    · have h3 := congrArg Prod.snd h\n      change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).2 = _ * _ at h3\n      exact left_eq_mul.mp h3",1],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","dirChar (recMap e q d)","dirChar (N := hostN e q d) (H := HA e) (recMap e q d)",2],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","def ChConductor : Prop","set_option backward.isDefEq.respectTransparency false in\ndef ChConductor : Prop",1],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","def DirCharInjective : Prop","set_option backward.isDefEq.respectTransparency false in\ndef DirCharInjective : Prop",1],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc","        have notImp {p q : Prop} (hn : ¬ (p → q)) : p ∧ ¬ q := by\n          classical\n          refine ⟨?_, ?_⟩\n          · by_contra hp\n            exact hn (fun h => (hp h).elim)\n          · intro hq\n            exact hn (fun _ => hq)\n        obtain ⟨hc1, hc⟩ := notImp hc\n        obtain ⟨hc2, hc⟩ := notImp hc",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 8000000 in\nprivate noncomputable def eGamE₁","set_option maxHeartbeats 8000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₁",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/FinSup.lean","CompleteLattice.WellFoundedGT.isSupFiniteCompact (Set.Iic L)","WellFoundedGT.isSupFiniteCompact (α := Set.Iic L)",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","def hostEll (e q d","set_option maxHeartbeats 2000000 in\nset_option backward.isDefEq.respectTransparency false in\ndef hostEll (e q d",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","LHost.dirChar (LHost.recMap e q d)","LHost.dirChar (N := LHost.hostN e q d) (H := LHost.HA e) (LHost.recMap e q d)",3],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/TensorBasis.lean","Finsupp.mapDomain_apply (fun x y h => by simpa using h)","Finsupp.mapDomain_apply_of_injective (fun x y h => by simpa using h)",1],["Formalism/HarderNarasimhan/HarderNarasimhanProofs/HtImage.lean","simp [Matrix.toEuclideanLin_apply]","rfl",1],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K g (Quotient.out (DoubleCoset.mk K K g))).mp","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp",2],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K s _).mpr","(DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr",1],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K g _).mpr","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NegReLogDerivPrincipalLFunctionLe.lean","  rw [hL, logDeriv_mul","  rw [hL]\n  change ‖logDeriv ((fun z : ℂ => ∏ p ∈ q.primeFactors, (1 - (p : ℂ) ^ (-z))) * riemannZeta) s - deriv riemannZeta s / riemannZeta s‖ ≤ Real.log ↑q\n  rw [logDeriv_mul",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NegReLogDerivPrincipalLFunctionLe.lean","logDeriv_prod (f := fun (p : ℕ) (z : ℂ) => 1 - (p : ℂ) ^ (-z))","logDeriv_fun_prod (f := fun (p : ℕ) (z : ℂ) => 1 - (p : ℂ) ^ (-z))",1],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/ValBasic.lean","[Module.Free ℤ S] [Module.Finite ℤ S] (g : S ≃+* S)","[Module.Free ℤ S] [Module.Finite ℤ S] [Infinite S] (g : S ≃+* S)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/IteratedDerivLogDerivDirichletLViaNearbyZeros.lean","Finset.prod_le_prod (fun _ _ => norm_nonneg _)","Finset.prod_le_prod₀ (fun _ _ => norm_nonneg _)",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LocalAbstract.lean","Finset.prod_le_prod (fun ρ _ =>","Finset.prod_le_prod₀ (fun ρ _ =>",1],["Development/AutomorphicArithmetic/ThickFrames/TilesLe.lean","prod_le_prod (fun s _ =>","prod_le_prod₀ (fun s _ =>",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","def PerHost (e q d","set_option backward.isDefEq.respectTransparency false in\ndef PerHost (e q d",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","(hostEll e q d chC).re","(hostEll e q d (chC (H := LHost.HA e))).re",1],["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      exact left_eq_mul.mp h3","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDrowLemmas.lean","rw [map_add, coeff_add, coeff_add, hp, hq, add_mul]","rw [map_add, rhCompatCoeffAdd, rhCompatCoeffAdd, hp, hq, add_mul]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLKBasis.lean","coeff d P","P.coeff d",3],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ArithmeticLargeSieveOneResidueClassPerPrime.lean","Nat.Coprime.mul ?_ ?_","(Nat.coprime_mul_iff_left.2 ⟨?_, ?_⟩)",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamE₂","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3","      letI : Group (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e :=\n        (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      have hz1 : z = 1 := by\n        simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm\n      first\n      | simpa only [Prod.snd_one, z] using hz1\n      | change z = (1 : UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e)\n        exact hz1\n      | rw [Prod.snd_one]\n        exact hz1",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂ (s : ℕ) : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n  QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)","private noncomputable def rhProdZpowersEquiv {A B : Type*} [CommGroup A] [CommGroup B]\n    (a : A) (ha : a ^ 2 = 1) :\n    ((A × B) ⧸ Subgroup.zpowers (a, (1 : B))) ≃* (A ⧸ Subgroup.zpowers a) × B := by\n  have hab : (a, (1 : B)) ^ 2 = 1 := by\n    apply Prod.ext\n    · simpa only [Prod.pow_mk, Prod.fst_one] using ha\n    · simp\n  have h : Subgroup.zpowers (a, (1 : B)) = (Subgroup.zpowers a).prod (⊥ : Subgroup B) := by\n    ext x\n    rcases x with ⟨x, y⟩\n    rw [mem_zpowers_sq hab, Subgroup.mem_prod, mem_zpowers_sq ha, Subgroup.mem_bot]\n    simp only [Prod.ext_iff, Prod.fst_one, Prod.snd_one]\n    tauto\n  exact (QuotientGroup.quotientMulEquivOfEq h).trans\n    ((QuotientGroup.prodMulEquiv (Subgroup.zpowers a) (⊥ : Subgroup B)).trans\n      (MulEquiv.prodCongr (MulEquiv.refl _) QuotientGroup.quotientBot))\n\nset_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamEDirect (s : ℕ) : GamE s ≃* QQ s × ℤˣ × ℤˣ :=\n  @rhProdZpowersEquiv ((ZMod (2 ^ (s + 2)))ˣ) (ℤˣ × ℤˣ)\n    inferInstance inferInstance (-1) neg_one_sq_units",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","((eGamE₁ s).trans (eGamE₂ s)).trans (eGamE₃ s)","(eGamEDirect s).trans (eGamE₃ s)",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLLe.lean","coeff d P","P.coeff d",3],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","(by simp [sq])) (by simp [sq])","(by simp [sq])) (by\n      simp [sq] <;> first\n        | rfl\n        | exact (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).mul_one 1)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","ZMod.lift (2 ^ e) ⟨f0, hf0⟩","ZMod.lift (2 ^ e) (A := Additive (HGrp e)) ⟨f0, hf0⟩",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/FrobMulInertia.lean","    have := hmulE 1 1\n    rw [mul_one] at this\n    exact (mul_eq_left.mp this.symm)","    have := hmulE 1 1\n    rw [mul_one] at this\n    apply Prod.ext\n    · apply Prod.ext\n      · have h1 := congrArg (fun g => g.1.1) this\n        change (galE e ζ a b 1).1.1 = _ * _ at h1\n        exact left_eq_mul.mp h1\n      · have h2 := congrArg (fun g => g.1.2) this\n        change (galE e ζ a b 1).1.2 = _ * _ at h2\n        exact left_eq_mul.mp h2\n    · have h3 := congrArg Prod.snd this\n      letI : Group (HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : HGrp e := (galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      have hz1 : z = 1 := by\n        simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm\n      first\n      | simpa only [Prod.snd_one, z] using hz1\n      | change z = (1 : HGrp e)\n        exact hz1\n      | rw [Prod.snd_one]\n        exact hz1",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardExtendedGaloisGroup.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupCardExtendedGaloisGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardTrivialFirstComponent.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupCardTrivialFirstComponent (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupDecomp (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupOrbits (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Inertia.lean","(by rw [Ideal.comap_bot_of_injective _ hinj]; exact bot_le)","(by\n      change Ideal.comap (algebraMap (𝓞 (hostE ζ a b)) (𝓞 L)) (⊥ : Ideal (𝓞 L)) ≤ P\n      rw [Ideal.comap_bot_of_injective _ hinj]\n      exact bot_le)",2],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","(isIntegral_algebraMap_iff (algebraMap (hostE ζ a b) L).injective).mp (hζint.add hζiint)","(isIntegral_algHom_iff (IsScalarTower.toAlgHom ℤ (hostE ζ a b) L)\n      (algebraMap (hostE ζ a b) L).injective).mp (hζint.add hζiint)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","      · simp [e2]","      · simp [e2] <;> first | exact one_mul _ | exact (rhHGrpCommGroupDecomp e).one_mul _",2],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","    · ext <;> simp [cc, c0, h, hi.neg_one_pow, hτ2]","    · ext <;> simp [cc, c0, h, hi.neg_one_pow, hτ2] <;> first | exact one_mul _ | exact (rhHGrpCommGroupOrbits e).one_mul _",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","(fun x y hxy => by simpa using hxy)","(fun x y hxy => by\n    have hh := congrArg Prod.snd hxy\n    change x * τ.2 = y * τ.2 at hh\n    exact mul_right_cancel hh)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardTrivialFirstComponent.lean","⟨⟨fun σ τ => hbijE.1 (by rw [hmulE, hmulE, mul_comm])⟩⟩","⟨⟨fun σ τ => hbijE.1 (by\n      rw [hmulE, hmulE]\n      exact mul_comm _ _)⟩⟩",1],["Formalism/GradedWeylDivisibility/StatementE.lean","coeff e F","F.coeff e",1],["Formalism/GradedWeylDivisibility/StatementE.lean","coeff e Q","Q.coeff e",1],["Formalism/SharpRestriction/LevelLetterCocycles/DataN.lean","def etaLoc (i : N.Loc) : ℚ :=\n  lenUnit (O := N.O i) (N.l i) (↥(N.MtUp i) ⧸ (N.MtLow i).comap (N.MtUp i).subtype)","set_option backward.isDefEq.respectTransparency false in\ndef etaLoc (i : N.Loc) : ℚ := by\n  letI : AddCommGroup (↥(N.MtUp i)) := inferInstance\n  letI : Module (N.O i) (↥(N.MtUp i)) := inferInstance\n  exact lenUnit (O := N.O i) (N.l i) (↥(N.MtUp i) ⧸ (N.MtLow i).comap (N.MtUp i).subtype)",1],["Development/AbelianVarietyTheory/Proofs/IwasawaDecomposition/NormOneIffOfSqrt.lean","(isIntegral_algebraMap_iff (algebraMap ℚ E).injective).1 hq","isIntegral_algebraMap_iff.mp hq",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupOrbitSg (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","  refine Prod.ext ?_ h2","  refine Prod.ext ?_ (by first | exact h2 | exact mul_right_cancel (a := t) (b := t') h2 | exact (rhHGrpCommGroupOrbitSg e).toGroup.mul_right_cancel _ _ _ h2 | exact mul_right_cancel h2)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupPrincipal (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","    rw [galE_mul hqd h, galE_mul hqd h, mul_comm]","    rw [galE_mul hqd h, galE_mul hqd h]\n    exact mul_comm (galE e ζ a b σ) (galE e ζ a b (τ.restrictScalars ℚ))",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","rw [isIntegral_algebraMap_iff (algebraMap (KinE ζ a b) (hostE ζ a b)).injective]","have ht : IsIntegral ℤ (algebraMap (KinE ζ a b) (hostE ζ a b) t) ↔ IsIntegral ℤ t := by\n      first\n      | exact isIntegral_algebraMap_iff\n      | exact isIntegral_algHom_iff (IsScalarTower.toAlgHom ℤ (KinE ζ a b) (hostE ζ a b))\n          (algebraMap (KinE ζ a b) (hostE ζ a b)).injective\n    rw [ht]",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","(show c0 * c0 = (1 : G0) by decide) (mul_one _)","(show c0 * c0 = (1 : G0) by decide) (by\n      change (1 : HGrp e) * 1 = 1\n      exact (rhHGrpCommGroupPrincipal e).mul_one 1)",1],["Formalism/SharpRestriction/LevelLetterCocycles/QuotientHomNonvanishingBound.lean","MvPolynomial.coeff d (Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C))","AddMonoidAlgebra.coeff (Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C) : MvPolynomial (Fin m) (N.O i)) d",1],["Formalism/LocalRingCardinality/DataKerI.lean","MvPolynomial.coeff μ P","P.coeff μ",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","  rw [hpl, Set.range_comp, Set.ncard_image_of_injective _ (emb_injective τ),\n    ← Submonoid.coe_powers, ← Nat.card_coe_set_eq, SetLike.coe_sort_coe, Nat.card_submonoidPowers,\n    hord, Prod.orderOf, orderOf_negOne]","  rw [hpl, Set.range_comp, Set.ncard_image_of_injective _ (emb_injective τ)]\n  let z : ℤˣ × HGrp e := (-1, φ.2)\n  change (Set.range (fun i : ℕ => z ^ i)).ncard = orderOf φ\n  rw [show Set.range (fun i : ℕ => z ^ i) = (Submonoid.powers z : Set (ℤˣ × HGrp e)) from\n    (Submonoid.coe_powers z).symm, ← Nat.card_coe_set_eq]\n  calc\n    _ = orderOf z := by\n      change Nat.card ↥(Submonoid.powers z) = orderOf z\n      exact Nat.card_submonoidPowers\n    _ = orderOf φ := by\n      change orderOf ((-1 : ℤˣ), φ.2) = orderOf φ\n      rw [Prod.orderOf, orderOf_negOne, hord]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+      - name: Apply four local compatibility repairs
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/FrameFacts.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhFrameHGrpCommGroup (e : ℕ) : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/FrameFacts.lean","theorem thick_part_two ","set_option maxHeartbeats 2000000 in\ntheorem thick_part_two ",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","namespace D7\n","namespace D7\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhArtinHGrpCommGroup (e : ℕ) : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","  art_h := fun u v hv => (hH_ggIso φ hinj _).trans (artinMap_dyadic_eq φ.e hH u v hv)","  art_h := fun u v hv => by\n    change φ.hH (ggIso φ hinj (art0 φ.e hH u)).2 = hcl φ.e v\n    exact (hH_ggIso φ hinj _).trans (artinMap_dyadic_eq φ.e hH u v hv)",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","    rw [← map_pow, MulEquiv.map_eq_one_iff]\n    refine Prod.ext (Prod.ext (Int.units_sq _) (Int.units_sq _)) ?_\n    show (art0 φ.e hH u).2 ^ 2 = 1\n    rw [h2, one_pow]","    rw [← map_pow]\n    have hs : art0 φ.e hH u ^ 2 = 1 := by\n      refine Prod.ext (Prod.ext (Int.units_sq _) (Int.units_sq _)) ?_\n      show (art0 φ.e hH u).2 ^ 2 = 1\n      rw [h2, one_pow]\n    exact (congrArg (ggIso φ hinj) hs).trans (ggIso φ hinj).map_one",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/KcDiffSmulMem.lean","isIntegral_algebraMap_iff (algebraMap H.K H.E).injective","isIntegral_algebraMap_iff",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/HostFacts.lean","Nat.Coprime.mul H.coprime_QS_d H.coprime_q_d","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨H.coprime_QS_d, H.coprime_q_d⟩",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/HostFacts.lean","Nat.Coprime.mul H.coprime_QS_q H.coprime_q_d.symm","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨H.coprime_QS_q, H.coprime_q_d.symm⟩",1],["Formalism/GL3MeanSquares/HookFormulaTorsion/DifferentIdealConditions.lean","  have := (Psi e).mul_mem hτΨ hmem\n  rw [mul_inv_cancel_left] at this\n  exact cc_not_mem e this","  letI : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n    QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n  have hprod := (Psi e).mul_mem hτΨ hmem\n  exact cc_not_mem e (by\n    first\n    | simpa only [mul_inv_cancel_left] using hprod\n    | have hc' : galE e ζ a b (τ.restrictScalars ℚ) *\n          ((galE e ζ a b (τ.restrictScalars ℚ))⁻¹ * cc e) = cc e := by\n        exact mul_inv_cancel_left _ _\n      exact hc' ▸ hprod)",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, (rel, old, s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Apply two exact observed compatibility fixes
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SizeWindowBrackets/ChainSlopeWindows/LipschitzWeightAndMinimum.lean","Finset.prod_le_one (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)","Finset.prod_le_one₀ (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSymOfModEq.lean","Nat.Coprime.mul (cop_2d e hH) (cop_qd hH)","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨cop_2d e hH, cop_qd hH⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel, s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Repair two inertia modules at observed roots
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharFrame.lean","(Nat.Coprime.mul hac hbc)","(Nat.coprime_mul_iff_left.mpr ⟨hac,hbc⟩)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharFrame.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhOfCharHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/CycGrp.lean","Nat.Coprime.mul (Nat.Coprime.coprime_mul_left_right H.QS_coprime) hq","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.coprime_mul_left_right H.QS_coprime, hq⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Repair verified source occurrences and identical group instance root
+        id: repair
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/AnyFrame.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhAnyFrameHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharLevel.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ h2) hc","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ h2, hc⟩"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharLevel.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ (by decide)) h","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ (by decide), h⟩"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/NonemptyFieldAxiomsCyclicPow.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ ((Nat.coprime_primes Nat.prime_two hdp).mpr (Ne.symm hd2)))\n        ((Nat.coprime_primes hqp hdp).mpr hqd)","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ ((Nat.coprime_primes Nat.prime_two hdp).mpr (Ne.symm hd2)),\n        (Nat.coprime_primes hqp hdp).mpr hqd⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Patch only three residual errors
+        id: residual
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/AnyFrame.lean","  · rw [w_neg_one, hH_toA, cl_neg_one]\n    rfl","  · rw [w_neg_one, hH_toA, cl_neg_one] <;> rfl"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhEqPowHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","(show c0 * ((1, -1) : G0) = (-1, 1) by decide) (mul_one _)","(show c0 * ((1, -1) : G0) = (-1, 1) by decide) (by change (1 : HGrp e) * 1 = 1; exact mul_one _)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","(show ((-1, 1) : G0) * (-1, 1) = 1 by decide) (mul_one _)","(show ((-1, 1) : G0) * (-1, 1) = 1 by decide) (by change (1 : HGrp e) * 1 = 1; exact mul_one _)"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Consolidate verified Galois roots and explicit character arguments
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SizeWindowBrackets/ChainSlopeWindows/GaloisMapComplexConjugation.lean")
+          s = p.read_text(encoding='utf-8')
+          edits = [["open Formalism Formalism.D5 Formalism.LFunctionChainParameters.characterSumData\n","open Formalism Formalism.D5 Formalism.LFunctionChainParameters.characterSumData\n\nset_option backward.isDefEq.respectTransparency false\nset_option maxHeartbeats 2000000\n\nlocal instance rhGaloisHGrpCommGroup (e : ℕ) : CommGroup (FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["  mem_inertia_iff q d (recMap e q d) p x","  mem_inertia_iff (H := HA e) q d (recMap e q d) p x",1],["(chC : AddChar (E0 × HA e) ℂ)","(chC (H := HA e) : AddChar (E0 × HA e) ℂ)",3],["(i • (hostData e q d).frob p) chC","(i • (hostData e q d).frob p) (chC (H := HA e))",1],["(recMap e q d) chC","(recMap e q d) (chC (H := HA e))",7],["dirChar (recMap e q d) (chC (H := HA e))","dirChar (H := HA e) (recMap e q d) (chC (H := HA e))",4],["dirChar_unit (recMap e q d)","dirChar_unit (H := HA e) (recMap e q d)",2],["dirChar (recMap e q d) ψ","dirChar (H := HA e) (recMap e q d) ψ",2]]
+          for old,new,count in edits:
+              assert s.count(old) == count, (old, s.count(old), count)
+              s = s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Repair cyclic power canonical group and hostDer timeout
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/NonemptyFieldAxiomsCyclicPow.lean")
+          s = p.read_text(encoding='utf-8')
+          for old,new in [["open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhCyclicPowHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["theorem hostDer : HostDer","set_option maxHeartbeats 2000000 in\ntheorem hostDer : HostDer"]]:
+              assert s.count(old) == 1, old
+              s = s.replace(old,new,1)
+          old = "    rw [h1, HostRaw.psAt, dif_pos (show Nat.Coprime p (hostRaw φ hinj hH he h).condN from hcop)]\n    rfl"
+          new = "    rw [h1, HostRaw.psAt, dif_pos (show Nat.Coprime p (hostRaw φ hinj hH he h).condN from hcop)] <;> rfl"
+          assert s.count(old) == 1
+          s = s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Apply one targeted patch and check imports
+        working-directory: upstream/lean
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, json
+          paths = json.loads("{\"002-anyframe\":\"Development/AutomorphicArithmetic/CoprimeRanks/AnyFramewindow.lean\",\"003-algebramap\":\"Formalism/LocalToGlobal/ProjectiveLattices/AlgebraMapCAt.lean\",\"004-height\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/HeightTheory/TheoremA.lean\",\"005-moebius\":\"Formalism/MoebiusJetDuality/Statement.lean\",\"006-dvr\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/DvrData.lean\",\"007-abproj\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/AbProj.lean\",\"008-unitary\":\"Development/AbelianVarietyTheory/Definitions/AutomorphicMembership/IsRationalUnitaryDeterminantMapRationalUnitaryTo.lean\"}")
+          changes = json.loads("{\"002-anyframe\":[[\"private theorem ord_eq_mul (D : ModData)\",\"set_option backward.isDefEq.respectTransparency false in\\nprivate theorem ord_eq_mul (D : ModData)\",1],[\"      exact ⟨⟨D.eta.rangeRestrict u, hu⟩, rfl⟩\",\"      let v : D.R := D.eta.rangeRestrict u\\n      have hv : v ∈ D.p1.ker := by\\n        apply MonoidHom.mem_ker.mpr\\n        change D.cl u = 1\\n        exact MonoidHom.mem_ker.mp hu\\n      let w : ↥D.p1.ker := @Subtype.mk D.R (fun t => t ∈ D.p1.ker) v hv\\n      refine Exists.intro w ?_\\n      apply Subtype.ext\\n      change D.ξ u = D.ξ u\\n      rfl\",1]],\"003-algebramap\":[[\"fun p t y y' h => by simp [hf.2 p t y y' h]\",\"fun p t y y' h => by simp [hf.2 p t y y' h, Algebra.smul_def, mul_left_comm]\",1]],\"004-height\":[[\"    LenLE (Module.length R1 (M1 ⧸ N1.comap M1.subtype))\",\"    letI : AddCommGroup M1 := Submodule.addCommGroup M1\\n    letI : Module R1 M1 := Submodule.module M1\\n    letI : HasQuotient M1 (Submodule R1 M1) := Submodule.hasQuotient\\n    LenLE (Module.length R1 (M1 ⧸ N1.comap M1.subtype))\",1]],\"005-moebius\":[[\"coeff α f\",\"f.coeff α\",1],[\"coeff α P * coeff α F\",\"P.coeff α * F.coeff α\",1],[\"coeff (Multiset.toFinsupp (l : Multiset σ)) f\",\"f.coeff (Multiset.toFinsupp (l : Multiset σ))\",1]],\"006-dvr\":[[\"Ideal.bot_prime\",\"inferInstance\",1]],\"007-abproj\":[[\"    IsScalarTower.of_algebraMap_eq fun _ => rfl\",\"    by\\n      apply IsScalarTower.of_algebraMap_eq\\n      intro x\\n      rfl\",1]],\"008-unitary\":[[\"(isIntegral_algebraMap_iff (algebraMap ℚ NegTwoField).injective).1 this\",\"isIntegral_algebraMap_iff.mp this\",1]]}")
+          target = os.environ["TARGET"]
+          p = Path(paths[target])
+          s = p.read_text()
+          for old,new,count in changes[target]:
+              assert s.count(old) == count, (target,old,s.count(old))
+              s = s.replace(old,new)
+          p.write_text(s)
+          Path("RFHMicroTarget.txt").write_text(str(p))
+          print("MICRO_TARGET",target,p,len(s.splitlines()))
+          for line in s.splitlines():
+              if line.startswith("import "):
+                  print(line)
+          PY
+      - name: Verify only selected Lean file
+        working-directory: upstream/lean
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(cat RFHMicroTarget.txt)"
+          lake env lean -o RFHMicroTarget.olean "$target" 2>&1 | tee ../../bridge/assembly-logs/micro.log
+          if grep -Eq 'uses .sorry.|sorryAx' ../../bridge/assembly-logs/micro.log; then exit 1; fi
+      - name: Preserve isolated evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-micro-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            bridge/assembly-logs/micro.log
+            upstream/lean/RFHMicroTarget.txt
+            upstream/lean/RFHMicroTarget.olean
+          if-no-files-found: ignore
