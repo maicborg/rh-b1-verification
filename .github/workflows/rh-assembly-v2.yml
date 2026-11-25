@@ -124,7 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45546929887
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45554256812
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -309,13 +309,13 @@ jobs:
               s = p.read_text(encoding='utf-8')
               assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
               p.write_text(s.replace(old, new), encoding='utf-8')
-          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean"]
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelLead.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaTallZero.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwlineLemmas.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/DualWeylModuleStable.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Wlocal.lean"]
           for rel in coeff_files:
               p = Path(rel)
               s = p.read_text(encoding='utf-8')
               # Restore the former coefficient argument order using a reducible alias.
               # Preserve the two partial applications and the named-argument generalize.
-              if rel.endswith("LNondomLemmas.lean"):
+              if rel.endswith(("LNondomLemmas.lean", "Wlocal.lean")):
                   assert s.count("congrArg (coeff m)") == 1
                   s = s.replace("congrArg (coeff m)", "congrArg (fun p => AddMonoidAlgebra.coeff p m)")
               if rel.endswith("LHwinLemmas.lean"):
@@ -423,6 +423,15 @@ jobs:
               ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
                "Finset.prod_le_prod (fun _ _ => abs_nonneg _)", "Finset.prod_le_prod₀ (fun _ _ => abs_nonneg _)")
           ]:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/GramBlock.lean","apply Finset.prod_le_one\n","apply Finset.prod_le_one₀\n"],["Formalism/GL3MeanSquares/HookFormulaTorsion/GlobalBoundRefinements.lean","    apply Finset.prod_le_prod\n    · intro ρ hρ","    apply Finset.prod_le_prod₀\n    · intro ρ hρ"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_one (fun j _ => hg0 j _)","Finset.prod_le_one₀ (fun j _ => hg0 j _)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_prod (fun j _ => by split_ifs <;> positivity)","Finset.prod_le_prod₀ (fun j _ => by split_ifs <;> positivity)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        obtain ⟨hc1, hc⟩ := _root_.not_imp.1 hc\n        obtain ⟨hc2, hc⟩ := _root_.not_imp.1 hc","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructA.lean","  rw [hld, logDeriv_mul","  rw [hld]\n  change logDeriv ((fun w : ℂ => (w - ρ) ^ analyticOrderNatAt f ρ) * g) s = _\n  rw [logDeriv_mul"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))","  change logDeriv ((fun z : ℂ => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ)) * h) s = _\n  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))"],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      conv_lhs => rw [e]\n      rw [logDeriv_mul","      conv_lhs => rw [e]\n      change logDeriv ((fun z : ℂ => ∏ w ∈ S, (z - w) ^ m w) * g) z = _\n      rw [logDeriv_mul"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/MeasureEqCovolumeMulVolumeImage.lean","B.equivFunL.lipschitz.isBounded_image","B.equivFunL.toContinuousLinearMap.lipschitz.isBounded_image"]]
+          for rel, old, new in edits:
               p = Path(rel)
               t = p.read_text(encoding="utf-8")
               assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
