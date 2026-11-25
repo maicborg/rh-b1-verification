@@ -118,11 +118,6 @@ jobs:
             rfh-parallel-audit-4341-${{ runner.os }}-core-45644481024
             rfh-parallel-audit-4341-${{ runner.os }}-galois-45644481024
             rfh-parallel-audit-4341-${{ runner.os }}-cyclic-45644481024
-            rfh-isolated-frame-pow-4341-${{ runner.os }}-45638363099
-            rfh-isolated-galois-roots-4341-${{ runner.os }}-45638419501
-            rfh-final-resume-level-4341-${{ runner.os }}-45635918438
-            rfh-final-resume-inertia-4341-${{ runner.os }}-45632853186
-            rfh-final-resume-galois-4341-${{ runner.os }}-45634299638
       - name: Gate 3A | restore geometric imports and elaborate cokernel
         working-directory: upstream/lean
         shell: bash
