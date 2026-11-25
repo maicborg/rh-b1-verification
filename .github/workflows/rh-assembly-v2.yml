@@ -124,7 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45565226607
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45570323625
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -468,6 +468,15 @@ jobs:
               assert t.count(old) == count, f"Unexpected pinned block: {rel}"
               p.write_text(t.replace(old, new), encoding="utf-8")
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3","      letI : Group (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e :=\n        (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂ (s : ℕ) : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n  QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)","private noncomputable def rhProdZpowersEquiv {A B : Type*} [CommGroup A] [CommGroup B]\n    (a : A) (ha : a ^ 2 = 1) :\n    ((A × B) ⧸ Subgroup.zpowers (a, (1 : B))) ≃* (A ⧸ Subgroup.zpowers a) × B := by\n  have hab : (a, (1 : B)) ^ 2 = 1 := by\n    apply Prod.ext\n    · simpa only [Prod.pow_mk, Prod.fst_one] using ha\n    · simp\n  have h : Subgroup.zpowers (a, (1 : B)) = (Subgroup.zpowers a).prod (⊥ : Subgroup B) := by\n    ext x\n    rcases x with ⟨x, y⟩\n    rw [mem_zpowers_sq hab, Subgroup.mem_prod, mem_zpowers_sq ha, Subgroup.mem_bot]\n    simp only [Prod.ext_iff, Prod.fst_one, Prod.snd_one]\n    tauto\n  exact (QuotientGroup.quotientMulEquivOfEq h).trans\n    ((QuotientGroup.prodMulEquiv (Subgroup.zpowers a) (⊥ : Subgroup B)).trans\n      (MulEquiv.prodCongr (MulEquiv.refl _) QuotientGroup.quotientBot))\n\nset_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamEDirect (s : ℕ) : GamE s ≃* QQ s × ℤˣ × ℤˣ :=\n  @rhProdZpowersEquiv ((ZMod (2 ^ (s + 2)))ˣ) (ℤˣ × ℤˣ)\n    inferInstance inferInstance (-1) neg_one_sq_units",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","((eGamE₁ s).trans (eGamE₂ s)).trans (eGamE₃ s)","(eGamEDirect s).trans (eGamE₃ s)",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
           cat > RHGate3ACoeffProbe.lean <<'LEAN'
           import Mathlib.Algebra.MvPolynomial.Basic
           local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
@@ -491,8 +500,8 @@ jobs:
           lake env lean RHGate3ACoeffProbe.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-probe.log
           # Check the real coefficient proof with the same notation, before the full closure.
           lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas 2>&1 | tee ../../bridge/assembly-logs/coeff-real-probe.log
-          # Preflight the six actual failing modules together; do not repeat full closure on failure.
-          lake build Formalism.SizeWindowBrackets.Chain2aCoreNoAnalytic Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets Formalism.GradedWeylDivisibility.FockSpaceTableaux.LDrowLemmas Formalism.GradedWeylDivisibility.FockSpaceTableaux.NablaLKBasis Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ArithmeticLargeSieveOneResidueClassPerPrime Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour 2>&1 | tee ../../bridge/assembly-logs/gate3a-six-module-preflight.log
+          # Only the two remaining failed modules: test actual source before expanding closure.
+          lake build Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour 2>&1 | tee ../../bridge/assembly-logs/gate3a-two-module-preflight.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
