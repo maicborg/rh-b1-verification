@@ -124,7 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45489418752
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45546929887
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -314,13 +314,23 @@ jobs:
               p = Path(rel)
               s = p.read_text(encoding='utf-8')
               # Restore the former coefficient argument order using a reducible alias.
+              # Preserve the two partial applications and the named-argument generalize.
+              if rel.endswith("LNondomLemmas.lean"):
+                  assert s.count("congrArg (coeff m)") == 1
+                  s = s.replace("congrArg (coeff m)", "congrArg (fun p => AddMonoidAlgebra.coeff p m)")
+              if rel.endswith("LHwinLemmas.lean"):
+                  assert s.count("congrArg (coeff d)") == 1
+                  s = s.replace("congrArg (coeff d)", "congrArg (fun p => AddMonoidAlgebra.coeff p d)")
+              if rel.endswith("LinSubstIsHomogeneous.lean"):
+                  assert s.count("coeff (R := O) (σ := n) α _") == 1
+                  s = s.replace("coeff (R := O) (σ := n) α _", "AddMonoidAlgebra.coeff (_ : MvPolynomial n O) α")
               s = re.sub(r"(?<![\w.])coeff(?![\w'])", "rhCompatCoeff", s)
               s = re.sub(r"(?<![\w.])coeff_zero(?![\w'])", "rhCompatCoeffZero", s)
               lines = s.splitlines(keepends=True)
               i = 0
               while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
                   i += 1
-              compat = """local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
+              compat = """local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
 
           private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
             (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
@@ -403,9 +413,24 @@ jobs:
                "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm).trans\n    (QuotientGroup.quotientKerEquivOfSurjective _ (phiE_surj s))).trans\n    (MulEquiv.prodCongr (eQQ s) (MulEquiv.refl _))",
                "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ := by\n  let e1 : GamE s ≃* (GalL (s + 2) ⧸ (phiE s).ker) :=\n    QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm\n  let e2 : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n    QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)\n  let e3 : (QQ s × ℤˣ × ℤˣ) ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n    MulEquiv.prodCongr (eQQ s) (MulEquiv.refl (ℤˣ × ℤˣ))\n  exact (e1.trans e2).trans e3", 1)
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new in [
+              ("Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean",
+               "Finset.prod_le_prod (fun _ _ => by linarith)", "Finset.prod_le_prod₀ (fun _ _ => by linarith)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => zero_le_one)", "Finset.prod_le_prod₀ (fun _ _ => zero_le_one)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => abs_nonneg _)", "Finset.prod_le_prod₀ (fun _ _ => abs_nonneg _)")
+          ]:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
           cat > RHGate3ACoeffProbe.lean <<'LEAN'
           import Mathlib.Algebra.MvPolynomial.Basic
-          local notation "rhCompatCoeff" => (fun m p => AddMonoidAlgebra.coeff p m)
+          local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
           example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) :
               rhCompatCoeff m (0 : MvPolynomial σ R) = 0 := by simp
           private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
@@ -419,8 +444,13 @@ jobs:
           example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
               (p + q).coeff m = p.coeff m + q.coeff m := by
             simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+          example {R σ : Type*} [CommSemiring R] (m : σ →₀ ℕ) :
+              rhCompatCoeff m (0 : MvPolynomial σ R) = 0 := by
+            rw [show (AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m) = 0 by simp]
           LEAN
           lake env lean RHGate3ACoeffProbe.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-probe.log
+          # Check the real coefficient proof with the same notation, before the full closure.
+          lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas 2>&1 | tee ../../bridge/assembly-logs/coeff-real-probe.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
