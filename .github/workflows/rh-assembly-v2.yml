@@ -124,7 +124,7 @@ jobs:
           path: upstream/lean/.lake/build
           key: rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            rh-assembly-v2-4341-${{ runner.os }}-integrated-45560653726
+            rh-assembly-v2-4341-${{ runner.os }}-integrated-45565226607
             rh-assembly-v2-4341-${{ runner.os }}-${{ matrix.shard }}-
             rh-assembly-v2-4341-${{ runner.os }}-integrated-
             rh-assembly-v2-4341-${{ runner.os }}-
@@ -459,6 +459,15 @@ jobs:
               assert t.count(old) == count, f"Unexpected pinned block: {rel}"
               p.write_text(t.replace(old, new), encoding="utf-8")
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","def PerHost (e q d","set_option backward.isDefEq.respectTransparency false in\ndef PerHost (e q d",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","(hostEll e q d chC).re","(hostEll e q d (chC (H := LHost.HA e))).re",1],["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      exact left_eq_mul.mp h3","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDrowLemmas.lean","rw [map_add, coeff_add, coeff_add, hp, hq, add_mul]","rw [map_add, rhCompatCoeffAdd, rhCompatCoeffAdd, hp, hq, add_mul]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLKBasis.lean","coeff d P","P.coeff d",3],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ArithmeticLargeSieveOneResidueClassPerPrime.lean","Nat.Coprime.mul ?_ ?_","(Nat.coprime_mul_iff_left.2 ⟨?_, ?_⟩)",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamE₂","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
           cat > RHGate3ACoeffProbe.lean <<'LEAN'
           import Mathlib.Algebra.MvPolynomial.Basic
           local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
@@ -482,6 +491,8 @@ jobs:
           lake env lean RHGate3ACoeffProbe.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-probe.log
           # Check the real coefficient proof with the same notation, before the full closure.
           lake build Formalism.GradedWeylDivisibility.FockSpaceTableaux.LNondomLemmas 2>&1 | tee ../../bridge/assembly-logs/coeff-real-probe.log
+          # Preflight the six actual failing modules together; do not repeat full closure on failure.
+          lake build Formalism.SizeWindowBrackets.Chain2aCoreNoAnalytic Development.AutomorphicArithmetic.IntegralCasts.CapelliIdentities.JumpSets Formalism.GradedWeylDivisibility.FockSpaceTableaux.LDrowLemmas Formalism.GradedWeylDivisibility.FockSpaceTableaux.NablaLKBasis Development.AbelianVarietyTheory.Proofs.GlobalInterpolation.ArithmeticLargeSieveOneResidueClassPerPrime Formalism.TameInertiaTowers.CentralOrderTwo.NegOneNeOneUnitsZmodFour 2>&1 | tee ../../bridge/assembly-logs/gate3a-six-module-preflight.log
           read -r -a targets <<< "$RH_TARGETS"
           time lake build "${targets[@]}" 2>&1 | tee ../../bridge/assembly-logs/gate3a-supply.log
       - name: Gate 3A | audit actual proof dependencies and axioms
