@@ -1,0 +1,12 @@
+{
+  "alwelldef": {
+    "file": "ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/PlaceDivisors/AlWellDefSt.lean",
+    "edits": [
+      [
+        "    (fun x y => by simp)\n    (fun r x => by ext <;> simp [mul_comm])",
+        "    (fun x y => by\n      change (TrivSqZeroExt.inr (φ x) : DualNumber R') * TrivSqZeroExt.inr (φ y) = 0\n      exact TrivSqZeroExt.inr_mul_inr R' (φ x) (φ y))\n    (fun r x => by ext <;> simp [mul_comm])",
+        1
+      ]
+    ]
+  }
+}
