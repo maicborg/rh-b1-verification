@@ -1,0 +1,72 @@
+{
+  "evdualjet": {
+    "file": "Formalism/MoebiusJetDuality/EvDualJet.lean",
+    "edits": [
+      [
+        "coeff α F",
+        "F.coeff α",
+        2
+      ],
+      [
+        "coeff α P",
+        "P.coeff α",
+        1
+      ]
+    ]
+  },
+  "formalgroup": {
+    "file": "Formalism/SharpRestriction/GrowthBounds/FormalGroupSystem.lean",
+    "edits": [
+      [
+        "MvPolynomial.coeff n P",
+        "P.coeff n",
+        1
+      ],
+      [
+        "MvPolynomial.coeff n (applyD (X.PIv j I v)\n        (X.ThZA Y.Kc j (MvPowerSeries.map (algebraMap (K0 p) Y.Kc) (expS p (-Y.PhAt j v)) * U)))",
+        "(applyD (X.PIv j I v)\n        (X.ThZA Y.Kc j (MvPowerSeries.map (algebraMap (K0 p) Y.Kc) (expS p (-Y.PhAt j v)) * U))).coeff n",
+        1
+      ],
+      [
+        "MvPolynomial.coeff n (applyD (X.PI j I fun _ => 0) (X.ThZA Y.Kc j (Y.ThA j La La' φ)))",
+        "(applyD (X.PI j I fun _ => 0) (X.ThZA Y.Kc j (Y.ThA j La La' φ))).coeff n",
+        2
+      ],
+      [
+        "MvPolynomial.coeff n (applyD (X.PI j I i0) f)",
+        "(applyD (X.PI j I i0) f).coeff n",
+        1
+      ]
+    ]
+  },
+  "latisprime": {
+    "file": "ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/HeightTheory/LaTIsPrime.lean",
+    "edits": [
+      [
+        "  Module.length (Op d.D d.N la) (↥(X ⊔ Θ) ⧸ Θ.comap (X ⊔ Θ).subtype)",
+        "  letI : AddCommGroup ↥(X ⊔ Θ) := Submodule.addCommGroup (X ⊔ Θ)\n  letI : Module (Op d.D d.N la) ↥(X ⊔ Θ) := Submodule.module (X ⊔ Θ)\n  letI : HasQuotient ↥(X ⊔ Θ) (Submodule (Op d.D d.N la) ↥(X ⊔ Θ)) := Submodule.hasQuotient\n  Module.length (Op d.D d.N la) (↥(X ⊔ Θ) ⧸ Θ.comap (X ⊔ Θ).subtype)",
+        1
+      ],
+      [
+        "  ((Module.length (Op d.D d.N la) (Zsat ⧸ Zla.comap Zsat.subtype)).toNat : ℝ)",
+        "  letI : AddCommGroup Zsat := Submodule.addCommGroup Zsat\n  letI : Module (Op d.D d.N la) Zsat := Submodule.module Zsat\n  letI : HasQuotient Zsat (Submodule (Op d.D d.N la) Zsat) := Submodule.hasQuotient\n  ((Module.length (Op d.D d.N la) (Zsat ⧸ Zla.comap Zsat.subtype)).toNat : ℝ)",
+        1
+      ],
+      [
+        "  ((Module.length (Op d.D d.N la) (A0 ⧸ B.comap A0.subtype)).toNat : ℝ)",
+        "  letI : AddCommGroup A0 := Submodule.addCommGroup A0\n  letI : Module (Op d.D d.N la) A0 := Submodule.module A0\n  letI : HasQuotient A0 (Submodule (Op d.D d.N la) A0) := Submodule.hasQuotient\n  ((Module.length (Op d.D d.N la) (A0 ⧸ B.comap A0.subtype)).toNat : ℝ)",
+        1
+      ]
+    ]
+  },
+  "alwelldef": {
+    "file": "ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/PlaceDivisors/AlWellDefSt.lean",
+    "edits": [
+      [
+        "    (fun x y => by simp)\n    (fun r x => by ext <;> simp [mul_comm])",
+        "    (fun x y => by\n      first\n      | (simp <;> ext <;> simp [DualNumber.eps]); done\n      | change (TrivSqZeroExt.inr (φ x) : DualNumber R') * TrivSqZeroExt.inr (φ y) = 0\n        simp)\n    (fun r x => by ext <;> simp [mul_comm])",
+        1
+      ]
+    ]
+  }
+}
