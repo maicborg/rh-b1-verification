@@ -1,0 +1,79 @@
+name: RFH | 123 simplified microtests
+on:
+  push:
+    branches: [assembly/rfh-123-simplified]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  UPSTREAM_PIN: 72fead102f663d5c7a407964a13dc0cf9d977207
+jobs:
+  elementary:
+    name: "Micro | ${{ matrix.module }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [Period, Scale]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lsernau/grh-lean
+          ref: ${{ env.UPSTREAM_PIN }}
+          path: upstream
+      - name: Install pinned Lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Mathlib cache
+        working-directory: upstream/grh-compact
+        run: lake exe cache get
+      - name: Compile independent microtest
+        working-directory: upstream/grh-compact
+        run: |
+          set -o pipefail
+          lake env lean --tstack=400000 -DmaxHeartbeats=4000000 "$GITHUB_WORKSPACE/RFH123S/${{ matrix.module }}.lean" 2>&1 | tee "$GITHUB_WORKSPACE/micro-${{ matrix.module }}.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: micro-${{ matrix.module }}
+          path: micro-*.log
+  geometry:
+    name: Geometry | pinned upstream + all modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lsernau/grh-lean
+          ref: ${{ env.UPSTREAM_PIN }}
+          path: upstream
+      - name: Install pinned Lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Restore dependency build
+        uses: actions/cache@v4
+        with:
+          path: upstream/grh-compact/.lake/build
+          key: rfh123s-lean435-preterminal-v1-${{ env.UPSTREAM_PIN }}-${{ runner.os }}
+      - name: Mathlib cache
+        working-directory: upstream/grh-compact
+        run: lake exe cache get
+      - name: Build preterminal dependencies (no New.Main)
+        working-directory: upstream/grh-compact
+        run: |
+          set -o pipefail
+          lake build +Statements +New.Endgame.LongForms +New.Data.DataExist +New.Endgame.OneSidedCriterion 2>&1 | tee "$GITHUB_WORKSPACE/upstream.log"
+      - name: Compile candidates independently when dependencies pass
+        run: bash scripts/check.sh upstream/grh-compact
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rfh123s-build-logs
+          path: |
+            logs/
+            upstream.log
