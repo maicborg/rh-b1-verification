@@ -6,7 +6,7 @@ namespace RFH123S
 /-- Logarithmic growth is smaller than every positive linear slope. -/
 lemma eventually_log_le_linear (a : ℝ) (ha : 0 < a) :
     ∀ᶠ u : ℝ in atTop, log u ≤ a * u := by
-  have h := (Real.isLittleO_log_rpow_atTop (r := (1 : ℝ)) zero_lt_one).bound ha
+  have h := (isLittleO_log_rpow_atTop (r := (1 : ℝ)) zero_lt_one).bound ha
   filter_upwards [h, eventually_ge_atTop (0 : ℝ)] with u hu h0
   have hu' : |log u| ≤ a * u := by
     simpa [Real.norm_eq_abs, Real.rpow_one, abs_of_nonneg h0] using hu
