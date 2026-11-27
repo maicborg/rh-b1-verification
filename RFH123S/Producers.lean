@@ -47,7 +47,8 @@ lemma filtered_bound (P : Parameters) (hd : PolylogDataExists P)
   obtain ⟨D, hDx, hX1, hB, hT, hden⟩ := hx
   have h := point_bound D hT
   rw [hDx] at h
-  exact h.trans (by linarith [hcost D hDx hX1 hB hT hden,
-    htail D hDx hX1 hB hT hden])
+  have hc' := hcost D hDx hX1 hB hT hden
+  have ht' := htail D hDx hX1 hB hT hden
+  exact h.trans (by linarith [hc', ht'])
 
 end RFH123S
