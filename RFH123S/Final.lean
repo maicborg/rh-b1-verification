@@ -21,7 +21,7 @@ lemma right_of_half_at_one
     IsUnit (9240 * 1 - 1 : ZMod (_ * 1))) (fun d h ↦ ?_) ρ (by grind) _ induced
   let P := Parameters.mk _ d ⟨1, rfl⟩ d.2 (by
     simp [← natCast_eq_zero_iff, h]; norm_cast; simp [↓natCast_eq_zero_iff, ← mul_assoc,
-      mul_dvd_mul_iff_right])
+      mul_dvd_mul_iff_right] <;> norm_num)
   refine ⟨⟨P.instHeegD.2, (P.coprime_N₁_d 0).coprime_mul_right⟩, ?_⟩
   simpa only [show 8 * ε + (2 : ℝ)⁻¹ - 1 = 8 * ε - 1/2 by ring] using
     hbound P (by rfl) (8 * ε) (by grind)
