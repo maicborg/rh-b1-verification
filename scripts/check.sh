@@ -52,4 +52,5 @@ run TailBridge Producers TailScalar
 run ScaleEventually Scale CostAsymptotic
 run ThickOrder
 run ThickCongruence ThickOrder
+run ReducedFinal Final CostBridge TailBridge
 exit "$status"

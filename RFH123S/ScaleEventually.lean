@@ -20,7 +20,9 @@ lemma eventually_polylog_scale (c : ℝ) :
     eventually_log_le_linear (1 / 1200) (by norm_num),
     eventually_ge_atTop (max 1 (1200 * log (10^6 : ℝ)))] with u hlow hlog hu
   have hu1 : 1 ≤ u := (le_max_left _ _).trans hu
-  have hc : 10^12 * c ≤ 6 * log (10^6 * u) := by linarith
+  have hc : 10^12 * c ≤ 6 * log (10^6 * u) := calc
+    _ ≤ log (10^6 * u) * 6 := (div_le_iff₀ (by norm_num : (0 : ℝ) < 6)).mp hlow
+    _ = _ := mul_comm _ _
   have h100 : 100 * (6 * log (10^6 * u)) ≤ u := by
     rw [Real.log_mul (by norm_num : (10^6 : ℝ) ≠ 0) (by linarith : u ≠ 0)]
     have hK := (le_max_right _ _).trans hu

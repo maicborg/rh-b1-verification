@@ -12,10 +12,17 @@ lemma thick_order_lower (P : Parameters) (s : ℕ) :
   let M := P.N₀ * 3 ^ (Nat.log 3 s + 5)
   have H := @Parameters.placeClass_placeOfInt P s (M + 1) (mod_cast by simp [M])
     (m := 2 ^ (s + 1)) (d := P.two_pow_dvd_N₁)
-  have h := @two_pow_le_of_pow_eq_one (M + 1) (mod_cast by simp [M]) _ s (orderOf_pos _)
-    (H ▸ Units.ext_iff.1 (pow_orderOf_eq_one
-      (P.placeClass P.two_pow_dvd_N₁ (P.placeOfInt s (M + 1)))))
-  simpa [M] using h
+  let g := P.placeClass P.two_pow_dvd_N₁ (P.placeOfInt s (M + 1))
+  have Hg : (g : ZMod (2 ^ (s + 1))) = ((M : ℤ) + 1 : ℤ) := H
+  have hp : (g : ZMod (2 ^ (s + 1))) ^ orderOf g = 1 := by
+    simpa using congrArg (fun z : (ZMod (2 ^ (s + 1)))ˣ =>
+      (z : ZMod (2 ^ (s + 1)))) (pow_orderOf_eq_one g)
+  have hpow : (((M : ℤ) + 1 : ℤ) : ZMod (2 ^ (s + 1))) ^ orderOf g = 1 := by
+    rw [← Hg]
+    exact hp
+  have h := @two_pow_le_of_pow_eq_one (M + 1) (mod_cast by simp [M]) (orderOf g) s
+    (orderOf_pos g) hpow
+  simpa [M, g] using h
 
 /-- Behrend in the actual group of infinite places, with freely chosen
 dimension and base instead of the original fixed dimension. -/
@@ -36,7 +43,7 @@ lemma exists_thick_variable (P : Parameters) (s n A : ℕ)
   have hle : (324 * s * A) ^ n ≤
       orderOf (P.placeClass P.two_pow_dvd_N₁
         (P.placeOfInt s ((P.N₀ * 3 ^ (Nat.log 3 s + 5) : ℕ) + 1))) := by
-    exact Nat.le_of_mul_le_mul_right (hfit.trans hb) hp
+    exact Nat.le_of_mul_le_mul_right (hfit.trans (by simpa only [Nat.mul_comm] using hb)) hp
   exact exists_three_term_free (P.placeClass P.two_pow_dvd_N₁)
     (P.placeOfInt s (-1))
     (P.placeOfInt s ((P.N₀ * 3 ^ (Nat.log 3 s + 5) : ℕ) + 1))
