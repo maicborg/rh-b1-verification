@@ -44,4 +44,7 @@ run Final Producers
 run Baseline Star
 run LiftRefined
 run VolumeRefined LiftRefined
+run CostLocal Point
+run CostAsymptotic
+run CostBridge Producers CostLocal CostAsymptotic
 exit "$status"
