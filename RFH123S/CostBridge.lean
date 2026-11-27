@@ -19,7 +19,7 @@ theorem polylogCostBridge_proved (P : Parameters) : PolylogCostBridge P := by
   have hden0 : 0 ≤ (#D.tops : ℝ) / #D.thick := by positivity
   have hnum0 : 0 ≤ (P.N₀.totient : ℝ) * ((#D.tops : ℝ) / #D.thick) *
       D.logB ^ 5 := by positivity
-  have hpow : D.logB ^ 5 = (10^6 * log x)^30 := by rw [hB, ← pow_mul]; norm_num
+  have hpow : D.logB ^ 5 = (10^6 * log x)^30 := by rw [hB, ← pow_mul]
   have hn : (P.N₀.totient : ℝ) * ((#D.tops : ℝ) / #D.thick) *
       D.logB ^ 5 ≤ exp (e * log x) / 2 := by
     rw [hpow]

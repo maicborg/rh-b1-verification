@@ -47,4 +47,6 @@ run VolumeRefined LiftRefined
 run CostLocal Point
 run CostAsymptotic
 run CostBridge Producers CostLocal CostAsymptotic
+run TailScalar CostAsymptotic
+run TailBridge Producers TailScalar
 exit "$status"
