@@ -49,4 +49,7 @@ run CostAsymptotic
 run CostBridge Producers CostLocal CostAsymptotic
 run TailScalar CostAsymptotic
 run TailBridge Producers TailScalar
+run ScaleEventually Scale CostAsymptotic
+run ThickOrder
+run ThickCongruence ThickOrder
 exit "$status"
