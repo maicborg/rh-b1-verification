@@ -9,8 +9,8 @@ namespace RFH123S
 theorem polylogCostBridge_proved (P : Parameters) : PolylogCostBridge P := by
   intro e he
   have hc : (0 : ℝ) < 2 * ((P.N₀.totient : ℝ) + 1) := by positivity
-  have hA := (eventually_cost_exp (2 * ((P.N₀.totient : ℝ) + 1)) e hc he).comp_tendsto
-    Real.tendsto_log_atTop
+  have hA := Real.tendsto_log_atTop.eventually
+    (eventually_cost_exp (2 * ((P.N₀.totient : ℝ) + 1)) e hc he)
   filter_upwards [hA] with x hx D hDx hX1 hB hT hden
   have hm : exp (D.logX / 2) ≤ (D.m : ℝ) := D.m_mem.1
   have hlog : log x = D.logX := by rw [← hDx]; exact Real.log_exp _
