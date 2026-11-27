@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [DensityDimension, DensityCapacity, DensityLogScales, DensityBase, RankScale]
+        module: [DensityRank, DensityAssemble]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -34,7 +34,11 @@ jobs:
         working-directory: upstream/grh-compact
         run: |
           set -o pipefail
-          lake env lean --tstack=400000 -DmaxHeartbeats=4000000 "$GITHUB_WORKSPACE/RFH123S/${{ matrix.module }}.lean" 2>&1 | tee "$GITHUB_WORKSPACE/micro-${{ matrix.module }}.log"
+          if [[ "${{ matrix.module }}" == "DensityAssemble" ]]; then
+            bash "$GITHUB_WORKSPACE/scripts/check-density.sh" "$PWD" 2>&1 | tee "$GITHUB_WORKSPACE/micro-DensityAssemble.log"
+          else
+            lake env lean --tstack=400000 -DmaxHeartbeats=4000000 "$GITHUB_WORKSPACE/RFH123S/${{ matrix.module }}.lean" 2>&1 | tee "$GITHUB_WORKSPACE/micro-${{ matrix.module }}.log"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

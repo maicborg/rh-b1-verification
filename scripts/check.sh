@@ -62,4 +62,6 @@ run PrimeWindows PrimePair
 run DensityDimension
 run DensityCapacity
 run DensityLogScales
+run DensityRank
+run DensityAssemble DensityRank DensityDimension DensityCapacity DensityLogScales DensityBase DensityBudget DensityAlgebra
 exit "$status"
