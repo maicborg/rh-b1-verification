@@ -34,7 +34,7 @@ lemma heightLe_liftVolume_refined {P} {D : Data P} {θ} (O : D.IsFitFamily θ) (
       rw [← mul_add, ← mul_add]
       gcongr
       simp only [liftCost, mul_sub, add_sub]
-      ring_nf) fun ι
+      ring_nf <;> exact le_rfl) fun ι
     n ↦ ⟨0, by
     have := div_ne_zero_iff.1 n; simp [← (H _).2, field, div_pow, V 1, *]
     erw [V ((θ ι).powTwist j)]; simp; ring⟩

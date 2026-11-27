@@ -56,7 +56,8 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: Restore dependency build
-        uses: actions/cache@v4
+        id: preterminal-cache
+        uses: actions/cache/restore@v4
         with:
           path: upstream/grh-compact/.lake/build
           key: rfh123s-lean435-preterminal-v1-${{ env.UPSTREAM_PIN }}-${{ runner.os }}
@@ -68,6 +69,13 @@ jobs:
         run: |
           set -o pipefail
           lake build +Statements +New.Endgame.LongForms +New.Data.DataExist +New.Endgame.OneSidedCriterion 2>&1 | tee "$GITHUB_WORKSPACE/upstream.log"
+      - name: Save successful dependency build before candidate checks
+        if: steps.preterminal-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: upstream/grh-compact/.lake/build
+          key: ${{ steps.preterminal-cache.outputs.cache-primary-key }}
       - name: Compile candidates independently when dependencies pass
         run: bash scripts/check.sh upstream/grh-compact
       - uses: actions/upload-artifact@v4

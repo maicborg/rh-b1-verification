@@ -20,7 +20,7 @@ lemma point_bound {P} (D : Data P) (hT : (0 : ℝ) < #D.thick) :
     unfold tail
     field_simp [hm.ne', ha.ne', hT.ne'] <;> ring
   rw [he, explicitCost]
-  exact add_le_add_right
+  exact add_le_add_left
     (div_le_div_of_nonneg_right
       (div_le_div_of_nonneg_right
         (div_le_div_of_nonneg_right (star_explicit (D := D)) hm.le) ha.le) hT.le) _
