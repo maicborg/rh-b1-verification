@@ -6,25 +6,34 @@ It neither calls the original terminal GRH result nor assumes RH. -/
 open DirichletCharacter Real Finset Filter Data Parameters ZMod Module
 namespace RFH123S
 
+/-- Reuse the generic parameter construction of the certified baseline, but
+take only a conditional bound as input, never its terminal nonvanishing theorem. -/
+private lemma right_of_half_at_level (q : ℕ) [NeZero q]
+    (hbound : ∀ P : Parameters, P.N₀ = 18480 * q → ∀ ε : ℝ, 0 < ε →
+      ∀ᶠ x : ℝ in atTop, primeError P.d P.N₀ x ≤ x ^ (ε - 1/2))
+    (χ : DirichletCharacter ℂ q) (ρ : ℂ) (hρ : 1 / 2 < ρ.re)
+    (pole : χ ≠ 1 ∨ ρ ≠ 1) : DirichletCharacter.LFunction χ ρ ≠ 0 := by
+  intro zero
+  set ε := (ρ.re ⊓ 1 - 2⁻¹) / 51
+  have induced : entireL (χ.changeLevel (dvd_mul_left q 18480)) ρ = 0 := by
+    rw [entireL]
+    grind [LFunction_changeLevel, changeLevel_eq_one_iff]
+  refine entireL_ne_zero_of_primeError_le (β := 8 * ε + 2⁻¹) (by grind)
+    (.of_mul_eq_one (9240 * q - 1) (by grind [natCast_self (18480 * q)]) :
+    IsUnit (9240 * q - 1 : ZMod (_ * q))) (fun d h ↦ ?_) ρ (by grind) _ induced
+  let P := Parameters.mk _ d ⟨q, rfl⟩ d.2 (by
+    simp [← natCast_eq_zero_iff, h]; norm_cast; simp [↓natCast_eq_zero_iff, ← mul_assoc,
+      mul_dvd_mul_iff_right])
+  refine ⟨⟨P.instHeegD.2, (P.coprime_N₁_d 0).coprime_mul_right⟩, ?_⟩
+  simpa only [show 8 * ε + (2 : ℝ)⁻¹ - 1 = 8 * ε - 1/2 by ring] using
+    hbound P (by rfl) (8 * ε) (by grind)
+
 lemma right_of_half_at_one
     (hbound : ∀ P : Parameters, P.N₀ = 18480 → ∀ ε : ℝ, 0 < ε →
       ∀ᶠ x : ℝ in atTop, primeError P.d P.N₀ x ≤ x ^ (ε - 1/2))
     (χ : DirichletCharacter ℂ 1) (ρ : ℂ) (hρ : 1 / 2 < ρ.re)
-    (pole : χ ≠ 1 ∨ ρ ≠ 1) : DirichletCharacter.LFunction χ ρ ≠ 0 := by
-  intro zero
-  set ε := (ρ.re ⊓ 1 - 2⁻¹) / 51
-  have induced : entireL (χ.changeLevel (dvd_mul_left 1 18480)) ρ = 0 := by
-    rw [entireL]
-    grind [LFunction_changeLevel, changeLevel_eq_one_iff]
-  refine entireL_ne_zero_of_primeError_le (β := 8 * ε + 2⁻¹) (by grind)
-    (.of_mul_eq_one (9240 * 1 - 1) (by grind [natCast_self (18480 * 1)]) :
-    IsUnit (9240 * 1 - 1 : ZMod (_ * 1))) (fun d h ↦ ?_) ρ (by grind) _ induced
-  let P := Parameters.mk _ d ⟨1, rfl⟩ d.2 (by
-    simp [← natCast_eq_zero_iff, h]; norm_cast; simp [↓natCast_eq_zero_iff, ← mul_assoc,
-      mul_dvd_mul_iff_right] <;> norm_num)
-  refine ⟨⟨P.instHeegD.2, (P.coprime_N₁_d 0).coprime_mul_right⟩, ?_⟩
-  simpa only [show 8 * ε + (2 : ℝ)⁻¹ - 1 = 8 * ε - 1/2 by ring] using
-    hbound P (by rfl) (8 * ε) (by grind)
+    (pole : χ ≠ 1 ∨ ρ ≠ 1) : DirichletCharacter.LFunction χ ρ ≠ 0 :=
+  right_of_half_at_level 1 (by simpa only [Nat.mul_one] using hbound) χ ρ hρ pole
 
 /-- Conditional terminal theorem, with the three outstanding inputs visible. -/
 theorem rh_of_polylog_producers
