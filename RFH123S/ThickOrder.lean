@@ -15,13 +15,16 @@ lemma thick_order_lower (P : Parameters) (s : ℕ) :
   let g := P.placeClass P.two_pow_dvd_N₁ (P.placeOfInt s (M + 1))
   have Hg : (g : ZMod (2 ^ (s + 1))) = ((M : ℤ) + 1 : ℤ) := H
   have hp : (g : ZMod (2 ^ (s + 1))) ^ orderOf g = 1 := by
-    simpa using congrArg (fun z : (ZMod (2 ^ (s + 1)))ˣ =>
-      (z : ZMod (2 ^ (s + 1)))) (pow_orderOf_eq_one g)
+    rw [← Units.val_pow_eq_pow_val, pow_orderOf_eq_one]
+    rfl
   have hpow : (((M : ℤ) + 1 : ℤ) : ZMod (2 ^ (s + 1))) ^ orderOf g = 1 := by
     rw [← Hg]
     exact hp
   have h := @two_pow_le_of_pow_eq_one (M + 1) (mod_cast by simp [M]) (orderOf g) s
     (orderOf_pos g) hpow
+  have hAbs : ((M : ℤ) + 1).natAbs = M + 1 := by
+    exact_mod_cast (Int.natAbs_natCast (M + 1))
+  rw [hAbs] at h
   simpa [M, g] using h
 
 /-- Behrend in the actual group of infinite places, with freely chosen

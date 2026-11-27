@@ -53,4 +53,5 @@ run ScaleEventually Scale CostAsymptotic
 run ThickOrder
 run ThickCongruence ThickOrder
 run ReducedFinal Final CostBridge TailBridge
+run DensityAlgebra
 exit "$status"
