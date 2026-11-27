@@ -19,7 +19,7 @@ lemma rank_scale (u : ℝ) (hu : 10000 ≤ u) :
   obtain ⟨e, he, he'⟩ := exists_nat_pow_near h3 (by norm_num : (1 : ℝ) < 3)
   have hlog := Real.log_le_log (by positivity : 0 < (2 : ℝ)^o) ho
   rw [Real.log_pow, Real.log_exp] at hlog
-  have hln : (0.69 : ℝ) < log 2 := Real.log_two_gt_d9
+  have hln : (0.69 : ℝ) < log 2 := (show (0.69 : ℝ) < 0.6931471803 by norm_num).trans Real.log_two_gt_d9
   have ho0 : 0 ≤ (o : ℝ) := by positivity
   have ho1 : (o : ℝ) * 0.69 ≤ u / 2 :=
     (mul_le_mul_of_nonneg_left hln.le ho0).trans hlog
@@ -30,4 +30,5 @@ lemma rank_scale (u : ℝ) (hu : 10000 ≤ u) :
     exact mul_le_mul_of_nonneg_left he (by norm_num)
   · linarith
 
+#print axioms rank_scale
 end RFH123S

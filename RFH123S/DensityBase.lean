@@ -26,6 +26,7 @@ lemma exists_behrend_base (W L : ℝ) (q : ℕ) (hq : 0 < q)
     apply hhigh.le.trans
     rw [pow_succ, ← pow_mul, mul_pow]
     rw [Nat.mul_comm q k]
-    ring
+    ring_nf <;> exact le_rfl
 
+#print axioms exists_behrend_base
 end RFH123S
