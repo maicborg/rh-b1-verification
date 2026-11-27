@@ -54,4 +54,9 @@ run ThickOrder
 run ThickCongruence ThickOrder
 run ReducedFinal Final CostBridge TailBridge
 run DensityAlgebra
+run RankScale
+run DensityBase
+run DensityBudget
+run PrimePair
+run PrimeWindows PrimePair
 exit "$status"

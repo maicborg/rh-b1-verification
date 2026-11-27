@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [Period, Scale]
+        module: [Period, Scale, DensityAlgebra, RankScale, DensityBase, DensityBudget]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
