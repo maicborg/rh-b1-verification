@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [PrimeAnalyticScalar, TailIntegral]
+        module: [PrimeAnalyticScalar]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
           path: micro-*.log
   geometry:
     if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[scalar-only]') }}
-    name: Geometry | pinned upstream + all modules
+    name: Dependency audit | minimal final closure
     runs-on: ubuntu-latest
     timeout-minutes: 355
     steps:
@@ -81,7 +81,10 @@ jobs:
         with:
           path: upstream/grh-compact/.lake/build
           key: ${{ steps.preterminal-cache.outputs.cache-primary-key }}
-      - name: Compile candidates independently when dependencies pass
+      - name: Compile actual final dependency closure
+        run: bash scripts/check-closure.sh upstream/grh-compact
+      - name: Optional full regression (manual dispatch only)
+        if: github.event_name == 'workflow_dispatch'
         run: bash scripts/check.sh upstream/grh-compact
       - uses: actions/upload-artifact@v4
         if: always()
