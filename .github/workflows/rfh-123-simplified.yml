@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [TailKernel, TailIdentity, PrimeWindowLower]
+        module: [TailKernel, TailIdentity, AbelStep]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4

@@ -26,7 +26,7 @@ lemma subtract_main_term (A : ℝ → ℝ) (a z : ℝ) (hz : 1 ≤ z)
       linarith [hh.1]) |>.continuousWithinAt)
   have heq : (∫ t in (1 : ℝ)..z, t⁻¹) = log z := by
     rw [integral_inv]
-    · simp [Real.log_div (by linarith : z ≠ 0) one_ne_zero]
+    · simp
     · rw [Set.uIcc_of_le hz]
       exact fun h => by norm_num at h
   calc
@@ -40,7 +40,6 @@ lemma subtract_main_term (A : ℝ → ℝ) (a z : ℝ) (hz : 1 ≤ z)
       have hh : t ∈ Set.Icc (1 : ℝ) z := by simpa [Set.uIcc_of_le hz] using ht
       have hne : t ≠ 0 := by linarith [hh.1]
       field_simp
-      ring
 
 #print axioms primeError_eq_neg_tail_of_constant
 #print axioms subtract_main_term

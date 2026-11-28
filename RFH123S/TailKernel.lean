@@ -34,7 +34,8 @@ lemma finite_weighted_kernel (S : Finset ℕ) (w : ℕ → ℝ) (z : ℝ)
         (Ioi ((n : ℝ)/2)) :=
       (integrableOn_Ioi_rpow_of_lt (by norm_num : (-2 : ℝ) < -1) hhalf).const_mul _
     apply IntegrableOn.integrable_indicator _ measurableSet_Icc
-    exact hInt.mono_set (fun t ht => by have := ht.1; linarith)
+    exact hInt.mono_set (fun t ht =>
+      show (n : ℝ)/2 < t from lt_of_lt_of_le (by linarith) ht.1)
 
 #print axioms tail_kernel
 #print axioms finite_weighted_kernel
