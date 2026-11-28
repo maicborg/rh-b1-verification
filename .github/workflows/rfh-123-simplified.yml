@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [TentKernel, LogDisk]
+        module: [TentKernel, PoleAlgebra]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
         run: |
           set -o pipefail
           lake env lean "$GITHUB_WORKSPACE/RFH123S/PerronLiteratureAudit.lean" 2>&1 | tee "$GITHUB_WORKSPACE/perron-audit.log"
-          python3 -c 'import re; s=open("../perron-audit.log").read(); a=re.findall(r"depends on axioms: \\[([^\\]]*)\\]",s); assert len(a)==5,a; assert all(set(x.strip() for x in l.split(",") if x.strip())<={"propext","Classical.choice","Quot.sound"} for l in a),a'
+          python3 -c 's=open("../perron-audit.log").read().splitlines(); a=[l.split("depends on axioms: [",1)[1].split("]",1)[0] for l in s if "depends on axioms: [" in l]; assert len(a)==5,a; assert all(set(x.strip() for x in l.split(",") if x.strip())<={"propext","Classical.choice","Quot.sound"} for l in a),a; print("Perron axiom audit: PASS (5/5)")'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

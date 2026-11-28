@@ -48,8 +48,11 @@ lemma tent_log_main (x : ℝ) (hx : 0 < x) :
   calc
     _ = 2*log 2 - 3*log (3/2) := by ring
     _ = log ((2:ℝ)^2 / (3/2:ℝ)^3) := by
-      rw [Real.log_div (by positivity) (by positivity), Real.log_pow, Real.log_pow]
-      norm_num
+      have h₂ : log ((2:ℝ)^2) = 2*log 2 := by rw [Real.log_pow]; norm_num
+      have h₃ : log ((3/2:ℝ)^3) = 3*log (3/2) := by rw [Real.log_pow]; norm_num
+      calc
+        _ = log ((2:ℝ)^2) - log ((3/2:ℝ)^3) := by rw [h₂, h₃]
+        _ = _ := (Real.log_div (by positivity) (by positivity)).symm
     _ = _ := by norm_num
 
 lemma tent_log_positive : 0 < log (32/27 : ℝ) :=
