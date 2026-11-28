@@ -38,7 +38,9 @@ lemma prime_window_positive (A B u U q mass : ℝ)
       _ = exp (A*u+(15/16:ℝ)*U+B*u) := (Real.exp_add _ _).symm
       _ < exp U := Real.exp_lt_exp.mpr hgap
   have h2 : (2 : ℝ) ≤ exp 1 := by
-    norm_num using Real.add_one_le_exp (1 : ℝ)
+    calc
+      (2 : ℝ) = 1 + 1 := by norm_num
+      _ ≤ exp 1 := Real.add_one_le_exp (1 : ℝ)
   have hmain : exp U/q ≤ (exp (U+1)-exp U)/q := by
     apply div_le_div_of_nonneg_right _ hq.le
     rw [Real.exp_add]

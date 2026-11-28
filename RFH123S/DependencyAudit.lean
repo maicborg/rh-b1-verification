@@ -3,7 +3,7 @@ import RFH123S.AnalyticFrontier
 open Lean Elab Command
 namespace RFH123S
 
-/-- Audit the actual imported environment, not just a list of source names.
+/- Audit the actual imported environment, not just a list of source names.
 The original terminal proof and the diagnostic baseline must be absent. -/
 run_cmd do
   let env ← getEnv
