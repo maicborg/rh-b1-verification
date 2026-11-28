@@ -64,4 +64,8 @@ run DensityCapacity
 run DensityLogScales
 run DensityRank
 run DensityAssemble DensityRank DensityDimension DensityCapacity DensityLogScales DensityBase DensityBudget DensityAlgebra
+run ThickDensity ThickCongruence DensityAssemble
+run PrimeRoom
+run DataAssembly ThickDensity PrimeWindows PrimeRoom ScaleEventually RankScale Producers
+run AnalyticFrontier ReducedFinal DataAssembly
 exit "$status"
