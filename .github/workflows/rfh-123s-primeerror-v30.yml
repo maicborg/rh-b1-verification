@@ -1,0 +1,66 @@
+name: RFH | 123 simplified V30 upstream growth and actual window bridge
+on:
+  push:
+    branches: [assembly/rfh-123-simplified]
+    paths:
+      - 'RFH123S/QRHGrowth.lean'
+      - 'RFH123S/QRHLogBound.lean'
+      - 'RFH123S/TentExact.lean'
+      - 'RFH123S/WindowFromPrimeError.lean'
+      - 'RFH123S/UniformErrorSeal.lean'
+      - '.github/workflows/rfh-123s-primeerror-v30.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  UPSTREAM_PIN: 72fead102f663d5c7a407964a13dc0cf9d977207
+jobs:
+  preterminal:
+    name: "PrimeError | ${{ matrix.module }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: QRHGrowth
+            target: New.Endgame.PrimeError
+          - module: QRHLogBound
+            target: New.Endgame.PrimeError
+          - module: TentExact
+            target: New.Endgame.PrimeError
+          - module: UniformErrorSeal
+            target: New.Endgame.LongForms
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: lsernau/grh-lean
+          ref: ${{ env.UPSTREAM_PIN }}
+          path: upstream
+      - name: Install Lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache/restore@v4
+        with:
+          path: upstream/grh-compact/.lake/build
+          key: rfh123s-lean435-preterminal-v1-${{ env.UPSTREAM_PIN }}-${{ runner.os }}
+      - name: Mathlib cache
+        working-directory: upstream/grh-compact
+        run: lake exe cache get
+      - name: Build preterminal imports only
+        working-directory: upstream/grh-compact
+        run: |
+          if [[ "${{ matrix.module }}" == "UniformErrorSeal" ]]; then
+            lake build +Statements +New.Endgame.LongForms +New.Data.DataExist +New.Endgame.OneSidedCriterion
+          else
+            lake build "+${{ matrix.target }}"
+          fi
+      - name: Compile exact dependency closure and audit axioms
+        run: bash scripts/check-primeerror-v29.sh upstream/grh-compact "${{ matrix.module }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v30-${{ matrix.module }}
+          path: logs/
