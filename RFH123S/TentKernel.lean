@@ -4,7 +4,7 @@ namespace RFH123S
 
 /-- Reciprocal variables a=1/n and b=1/x. This is the exact weight
 of F(x)-3 F(3x/2)+2 F(2x). -/
-def tentWeight (a b : ℝ) : ℝ :=
+noncomputable def tentWeight (a b : ℝ) : ℝ :=
   max (a-b) 0 - 3 * max (a-2*b/3) 0 + 2 * max (a-b/2) 0
 
 lemma tent_weight_outside_right (a b : ℝ) (hb : 0 ≤ b) (ha : b ≤ a) :
