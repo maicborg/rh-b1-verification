@@ -64,7 +64,10 @@ theorem polylogDataExists_of_primeWindows (P : Parameters)
       thick := T
       g := g
       piG := α
-      scale := by simpa [u,L] using hscale
+      scale := by
+        have e12 : (1e12 : ℝ) = 10^12 := by norm_num
+        have e6 : (1e6 : ℝ) = 10^6 := by norm_num
+        simpa [u,L,e12,e6] using hscale
       m_mem := by exact_mod_cast hm
       r_mem := by exact_mod_cast hr
       m_pow := ⟨o,rfl,rfl⟩
