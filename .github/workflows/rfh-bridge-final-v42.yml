@@ -1,0 +1,1929 @@
+name: RFH | V42 build missing TopG interface and certify producer inputs
+on:
+  push:
+    branches: [assembly/uno-due-tre-v2]
+    paths: [.github/workflows/rfh-bridge-final-v42.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rfh-bridge-final-v42
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: openai/math
+          ref: 4eaee87548250b2682affda7d05d947c05554bae
+          path: upstream
+          filter: blob:none
+          sparse-checkout: lean
+      - uses: actions/checkout@v4
+        with:
+          repository: CocoSgt/riemann-hypothesis-lean
+          ref: 7cbf7a0c32fca1badf05931879a37c3f8a2b03b4
+          path: alpoge
+          filter: blob:none
+          sparse-checkout: src
+      - name: Assemble pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          for folder in BuildAid CompanionTheory Development Formalism GroundTheory Lemmata PositivityTheory ReciprocityTheory Supplements; do
+            cp -a "alpoge/src/$folder" "upstream/lean/$folder"
+          done
+          cat >> upstream/lean/lakefile.lean <<'EOF'
+          lean_lib BuildAid where globs := #[`BuildAid.+]
+          lean_lib CompanionTheory where globs := #[`CompanionTheory.+]
+          lean_lib Development where globs := #[`Development.+]
+          lean_lib Formalism where globs := #[`Formalism.+]
+          lean_lib GroundTheory where globs := #[`GroundTheory.+]
+          lean_lib Lemmata where globs := #[`Lemmata.+]
+          lean_lib PositivityTheory where globs := #[`PositivityTheory.+]
+          lean_lib ReciprocityTheory where globs := #[`ReciprocityTheory.+]
+          lean_lib Supplements where globs := #[`Supplements.+]
+          EOF
+          mkdir -p upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds
+          cp bridge/B2*.lean upstream/lean/Development/AutomorphicArithmetic/MeanSquareBounds/
+          python3 bridge/ci/b2_prepare.py --root upstream/lean --bridge bridge --mode apply
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('upstream/lean/Development/AutomorphicArithmetic/DedekindLFunctions/LandauTheorems/mellinGchiOfNeOne.lean')
+          s = p.read_text(encoding='utf-8')
+          for old, new in [["      convert h1 using 1\n      · rfl\n      · ext m\n        simp only [F, ha]\n        ring\n      · simp","      convert h1 using 1\n      · funext m\n        simp only [F, ha]\n        ring\n      · simp"],["    convert h1 using 1\n    · rfl\n    · ext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]","    convert h1 using 1\n    · funext m\n      simp only [F]\n      rw [integral_const_mul, mellin_ramp (m + 1) (by omega) s hs,\n        LSeries.term_of_ne_zero (by omega), cpow_neg]\n      ring\n    · simp [LSeries]"]]:
+              if s.count(old) != 1:
+                  raise SystemExit('Unexpected pinned Mellin proof block')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Mellin compatibility: two exact tactic blocks patched; statements unchanged')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new, count in [["Formalism/TameInertiaTowers/StatementGroup.lean","(powMonoidHom 2 : (GalL n ⧸ Subgroup.zpowers (JJ n)) →* _).range","(powMonoidHom (α := GalL n ⧸ Subgroup.zpowers (JJ n)) 2).range",2],["ReciprocityTheory/GaloisValuations/GlobalB.lean","Ideal.isMaximal_of_isIntegral_of_isMaximal_comap (R := 𝓞 F) Q","Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := 𝓞 F) Q",1],["ReciprocityTheory/GaloisValuations/GlobalB.lean","    (by rw [show Ideal.comap (algebraMap (𝓞 F) (IntCl F Ω)) Q = v.asIdeal from\n      under_primeBelow hA]; exact v.isMaximal)","    (by\n      rw [hQ, under_primeBelow hA]\n      exact v.isMaximal)",1]]:
+              p = Path('upstream/lean') / rel
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != count:
+                  raise SystemExit('Unexpected pinned compatibility block: ' + rel)
+              p.write_text(s.replace(old, new), encoding='utf-8')
+              print('Compatibility patch:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("upstream/lean/Development/AutomorphicArithmetic/CharacterBoxes")
+          p = d / 'ExistsPageN.lean'
+          q = d / 'PairGood.lean'
+          s = p.read_text(encoding='utf-8')
+          t = q.read_text(encoding='utf-8')
+          block = "structure WinPair (eps Y : ℝ) (q d : ℕ) : Prop where\n  q_prime : q.Prime\n  q_mod : q % 8 = 3\n  q_lo : Y ^ (eps / 5) / 2 < Real.log q\n  q_up : Real.log q ≤ Y ^ (eps / 5)\n  d_prime : d.Prime\n  d_mod : d % 16 = 7\n  d_lo : Y ^ (eps / 5) * Real.log Y ^ 2 / 2 < Real.log d\n  d_up : Real.log d ≤ Y ^ (eps / 5) * Real.log Y ^ 2\n  d_q : q ∣ d + 1\n  d_small : ∀ p : ℕ, p.Prime → p ≠ 2 → (p : ℝ) ≤ Y ^ (eps / 5) → p ∣ d + 1\n"
+          assert s.count(block) == 1
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n'
+          assert t.count(old) == 1
+          new = 'import Development.AutomorphicArithmetic.CharacterBoxes.WinPairArithmetic\n'
+          head = 'import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions\n\nnoncomputable section\n\nnamespace UpperTheory.Top\n\nopen Formalism.HC\n\n'
+          (d / 'WinPairArithmetic.lean').write_text(head + block + '\nend UpperTheory.Top\n\nend\n', encoding='utf-8')
+          p.write_text(new + s.replace(block, ''), encoding='utf-8')
+          q.write_text(t.replace(old, new), encoding='utf-8')
+          print('WinPair extracted verbatim; original qualified declaration name retained; cohomology not patched')
+          PY
+          mkdir -p bridge/assembly-logs
+          cp bridge/RHAssemblyV2.lean upstream/lean/RHAssemblyV2.lean
+      - name: Install Lean
+        working-directory: upstream/lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Resolve dependencies and Mathlib cache
+        working-directory: upstream/lean
+        timeout-minutes: 12
+        run: |
+          lake update
+          lake exe cache get
+          lean --version
+      - name: Restore compatible compiled modules
+        uses: actions/cache/restore@v4
+        id: cache
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-bridge-final-v42-4341-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            rfh-bridge-final-v39-4341-Linux-46131029624
+            rfh-bridge-final-v36-4341-Linux-46126659783
+            rfh-bridge-final-v35-4341-Linux-46107635466
+            rfh-bridge-final-v32-4341-Linux-46072883155
+            rfh-producer-micro-v30-4341-Linux-topg0-46063854311
+            rfh-producer-micro-v30-4341-Linux-topg1-46063854311
+            rfh-producer-micro-v30-4341-Linux-topg2-46063854311
+            rfh-producer-micro-v28-4341-Linux-vwin-46060478517
+            rfh-bridge-resume-v2-4341-Linux-45713390042
+      - name: Gate 3A | restore geometric imports and elaborate cokernel
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Development/AutomorphicArithmetic/CharacterBoxes/TwistForm.lean')
+          s = p.read_text(encoding='utf-8')
+          old = 'import Development.AutomorphicArithmetic.CharacterBoxes.PairGood\n'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, old + 'import Development.AutomorphicArithmetic.CharacterBoxes.ExistsPageN\n', 1), encoding='utf-8')
+          p = Path('Formalism/GaloisCohomology/Statement.lean')
+          s = p.read_text(encoding='utf-8')
+          old = '''def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop :=
+            PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          new = '''set_option backward.isDefEq.respectTransparency false in
+          def PTCokerAt (D : LData F Ω l) (e : ℤ) : Prop := by
+            letI : ∀ v : D.S, AddCommGroup (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : ∀ v : D.S, Module ℤ_[l] (H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              fun v => inferInstance
+            letI : AddCommGroup (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.addCommGroup
+            letI : Module ℤ_[l] (∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) :=
+              Pi.module _ _ _
+            exact PTCase F l →
+              Module.length ℤ_[l] ((∀ v : D.S, H2 ((zlTw D (e + 1)).comp (locFam D.S D.A v))) ⧸
+                  LinearMap.range (localH2 D e)) =
+                Module.length ℤ_[l] (H0 (qzTw D e))'''
+          assert s.count(old) == 1, 'Unexpected pinned PTCokerAt block'
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Apply verified historical compatibility patches
+        working-directory: upstream/lean
+        timeout-minutes: 115
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          patches = [["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","by convert hmq'; exact Subsingleton.elim _ _","by convert hmq' <;> exact Subsingleton.elim _ _"],["Formalism/CMTypeGalois/CMTypeFrobenius/HostConj.lean","      convert this using 1\n      norm_num","      convert this using 1 <;> norm_num"],["Formalism/LatticeTheta/LatticeThetaProofs/LatticeSummableDecay.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/AdaptedBasis.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/LatticeSlopes/LatticeSlopesProofs/FiniteSaturated.lean","AddSubgroup.isClosed_of_discrete (H := L.toAddSubgroup)","AddSubgroup.isClosed_of_discrete (U := L.toAddSubgroup)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Ipindep.lean","(DoubleCoset.eq _ _ (s c) (s' c)).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g (Quotient.out (DoubleCoset.mk K K g))).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K s (Quotient.out c)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K g ((a : G) * g * b)).2","DoubleCoset.eq.mpr"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq K K (Quotient.out (DoubleCoset.mk K K g)) g).1","DoubleCoset.eq.mp"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","(DoubleCoset.eq Γ K (s (DoubleCoset.mk Γ K g)) g).1","DoubleCoset.eq.mp"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","Finset.prod_le_prod (fun i _ => Finset.sum_nonneg","Finset.prod_le_prod₀ (fun i _ => Finset.sum_nonneg"],["Formalism/HermitianLattices/HermitianLatticesProofs/ThetaSummable.lean","        refine (hPSD.dotProduct_mulVec_zero_iff v).mp ?_\n        rw [star_trivial]\n        exact heq.symm","        exact hPSD.dotProduct_mulVec_zero_iff.mp (by simpa only [star_trivial] using heq.symm)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_prod (fun i _ => hnn i)","Finset.prod_le_prod₀ (fun i _ => hnn i)"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","(hG.dotProduct_mulVec_zero_iff _).mp","hG.dotProduct_mulVec_zero_iff.mp"],["Formalism/GL3MeanSquares/HookFormulaTorsion/HadamardUnitDiagonalDetLeOne.lean","Finset.prod_le_one (fun c _ => hcol0 c)","Finset.prod_le_one₀ (fun c _ => hcol0 c)"],["Formalism/TameInertiaTowers/CentralOrderTwo/Groups.lean","Finset.prod_le_prod (fun _ _ => Nat.zero_le _) (fun i _ => hfin i)","Finset.prod_le_prod (fun i _ => hfin i)"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply]"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","simp only [coeff_add, star_add]","simp only [AddMonoidAlgebra.coeff_add, Pi.add_apply, star_add]"],["Formalism/GradedWeylDivisibility/StatementC.lean","(coeff m g)","(g.coeff m)"]]
+          for rel, old, new in patches:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, f'Unexpected compatibility block: {rel}'
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('Gate3A API compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          edits = [["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n    (DoubleCoset.out_eq' K K _).symm","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp\n    (DoubleCoset.out_eq' _).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' K K c)","((DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr ⟨a, a.2, b, b.2, e⟩).trans\n      (DoubleCoset.out_eq' c)"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","(DoubleCoset.eq.mpr ⟨a, a.2, b, b.2, rfl⟩).symm","((DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr ⟨a, a.2, b, b.2, rfl⟩).symm"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Heckebasic.lean","DoubleCoset.eq.mp\n        (DoubleCoset.out_eq' K K (DoubleCoset.mk K K g))","(DoubleCoset.eq (H := K) (K := K) (a := Quotient.out (DoubleCoset.mk K K g)) (b := g)).mp\n        (DoubleCoset.out_eq' (DoubleCoset.mk K K g))"],["Formalism/SatakeDualWeyl/AdelicIwasawaHecke/AutomorphicFormsDecompositionHolds.lean","have h := DoubleCoset.eq.mp (hs _)","have h := (DoubleCoset.eq (H := Γ) (K := K) (a := s (DoubleCoset.mk Γ K g)) (b := g)).mp (hs (DoubleCoset.mk Γ K g))"],["Formalism/RealPlaceAnalysis/RealPlaceTaylor/ProdFactorialSupportSubSingle.lean","AddMonoidAlgebra.coeff_add, Pi.add_apply","MvPolynomial.coeff_add"],["Formalism/FormalGroupLog/Statement.lean","MvPowerSeries.pderiv K i","MvPowerSeries.pderiv (R := K) i"],["Formalism/SharpRestriction/LevelLetterCocycles/DataNLoc.lean","PowerSeries.derivative LL E","PowerSeries.derivative (R := LL) E"],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","noncomputable def eGamE","set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == (2 if rel.endswith('ProdFactorialSupportSubSingle.lean') else 1), f'Unexpected second compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          coeff_files = ["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LRowstLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LNondomLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCdegLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCpleadLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LCcompLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LeadInterlaced.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LGradedLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelHomog.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelDecomp.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/LinSubstIsHomogeneous.lean","Formalism/FockGram/StatementFock.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/FockDiagBound.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/PeelLead.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaTallZero.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwlineLemmas.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/DualWeylModuleStable.lean","Formalism/SatakeDualWeyl/AdelicIwasawaHecke/Wlocal.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/HWLine.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDbasisLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDrowLemmas.lean","Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDlatLemmas.lean"]
+          for rel in coeff_files:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              # Restore the former coefficient argument order using a reducible alias.
+              # Preserve the two partial applications and the named-argument generalize.
+              if rel.endswith(("LNondomLemmas.lean", "Wlocal.lean", "LDlatLemmas.lean")):
+                  assert s.count("congrArg (coeff m)") == 1
+                  s = s.replace("congrArg (coeff m)", "congrArg (fun p => AddMonoidAlgebra.coeff p m)")
+              if rel.endswith("LDbasisLemmas.lean"):
+                  old = "congrArg (MvPolynomial.coeff (o.degree (v j)))"
+                  assert s.count(old) == 1
+                  s = s.replace(old, "congrArg (fun p => AddMonoidAlgebra.coeff p (o.degree (v j)))")
+              if rel.endswith("LHwinLemmas.lean"):
+                  assert s.count("congrArg (coeff d)") == 1
+                  s = s.replace("congrArg (coeff d)", "congrArg (fun p => AddMonoidAlgebra.coeff p d)")
+              if rel.endswith("LinSubstIsHomogeneous.lean"):
+                  assert s.count("coeff (R := O) (σ := n) α _") == 1
+                  s = s.replace("coeff (R := O) (σ := n) α _", "AddMonoidAlgebra.coeff (_ : MvPolynomial n O) α")
+              s = re.sub(r"(?<![\w.])coeff(?![\w'])", "rhCompatCoeff", s)
+              s = re.sub(r"(?<![\w.])coeff_zero(?![\w'])", "rhCompatCoeffZero", s)
+              lines = s.splitlines(keepends=True)
+              i = 0
+              while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                  i += 1
+              compat = """local notation "rhCompatCoeff" m:arg p:arg => AddMonoidAlgebra.coeff p m
+
+          private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            rhCompatCoeff m (p + q) = rhCompatCoeff m p + rhCompatCoeff m q := by
+            change (p + q).coeff m = p.coeff m + q.coeff m
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          private theorem rhCompatCoeffZero {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) : AddMonoidAlgebra.coeff (0 : MvPolynomial σ R) m = 0 := by
+            simp
+
+          """
+              lines.insert(i, compat)
+              p.write_text(''.join(lines), encoding='utf-8')
+              print('Gate3A coefficient compatibility:', rel)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GL3MeanSquares/ModelCocycleExponent.lean","PowerSeries.derivative K","PowerSeries.derivative (R := K)",2],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DeterminantCauchySchwarz.lean","Finset.prod_le_prod (fun _ _ => zero_le_one)","Finset.prod_le_prod₀ (fun _ _ => zero_le_one)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ExistsInterpolationExteriorSmallCoeffs.lean","Finset.prod_le_one (fun i _ => norm_nonneg _)","Finset.prod_le_one₀ (fun i _ => norm_nonneg _)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","exact prod_le_one (fun c' _ => (hind c' _).1)","exact prod_le_one₀ (fun c' _ => (hind c' _).1)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun c' _ => ?_)","refine prod_le_prod₀ (fun c' _ => ?_)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ChoiceOfTops.lean","refine prod_le_prod (fun j _ => ?_)","refine prod_le_prod₀ (fun j _ => ?_)",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/RowDivStable.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LHwinLemmas.lean","conv => enter [2, 1, 2]; rw [f.as_sum]","nth_rewrite 1 [f.as_sum]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, f'Unexpected third compatibility block: {rel}'
+              p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          coeff_roots = [
+              Path("Formalism/GradedWeylDivisibility/FockSpaceTableaux"),
+              Path("Formalism/SatakeDualWeyl/AdelicIwasawaHecke"),
+              Path("Formalism/FockGram/FockGramProofs")
+          ]
+          # Limit changes to files with the old coefficient lemma in the failed closure.
+          coeff_names = {"LNondomLemmas.lean", "LGradedLemmas.lean", "FockPerm.lean",
+              "LRowstLemmas.lean", "LCcompLemmas.lean", "LCpleadLemmas.lean",
+              "FockDiagBound.lean", "LeadInterlaced.lean", "LHwinLemmas.lean",
+              "PeelHomog.lean", "LinSubstIsHomogeneous.lean"}
+          for root in coeff_roots:
+              for p in root.glob("*.lean"):
+                  if p.name not in coeff_names:
+                      continue
+                  old = p.read_text(encoding="utf-8")
+                  if p.name == "FockPerm.lean":
+                      helper = """private theorem rhCompatCoeffAdd {R σ : Type*} [CommSemiring R]
+            (m : σ →₀ ℕ) (p q : MvPolynomial σ R) :
+            (p + q).coeff m = p.coeff m + q.coeff m := by
+            simp only [AddMonoidAlgebra.coeff_add, Finsupp.add_apply]
+
+          """
+                      lines = old.splitlines(keepends=True)
+                      i = 0
+                      while i < len(lines) and (lines[i].startswith('import ') or not lines[i].strip()):
+                          i += 1
+                      lines.insert(i, helper)
+                      old = ''.join(lines)
+                  new = re.sub(r"(?<![\w.])coeff_add(?![\w'])", "rhCompatCoeffAdd", old)
+                  if new != old:
+                      p.write_text(new, encoding="utf-8")
+                      print("Qualified coefficient lemma:", p)
+          def edit(rel, old, new, count):
+              p = Path(rel)
+              s = p.read_text(encoding="utf-8")
+              assert s.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(s.replace(old, new), encoding="utf-8")
+              print("Gate3A targeted compatibility:", rel)
+          rel = "Formalism/TameInertiaTowers/CentralOrderTwo/MemDecompositionSubgroupIff.lean"
+          for zp in ["zpowers", "Subgroup.zpowers"]:
+              edit(rel, f"(powMonoidHom 2 : (GalL n ⧸ {zp} (JJ n)) →* _).range",
+                   f"(powMonoidHom (α := GalL n ⧸ {zp} (JJ n)) 2).range", 2)
+          rel = "Formalism/RealPlaceAnalysis/RealPlaceTaylor/CompactHaarRightInvariantInst.lean"
+          edit(rel, "isProbabilityMeasure_map hm.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff hm.aemeasurable).2 inferInstance", 1)
+          edit(rel, "isProbabilityMeasure_map measurable_inv.aemeasurable",
+               "(Measure.isProbabilityMeasure_map_iff measurable_inv.aemeasurable).2 inferInstance", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "set_option maxHeartbeats 2000000 in\nnoncomputable def eGamE",
+               "set_option maxHeartbeats 8000000 in\nnoncomputable def eGamE", 1)
+          edit("Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean",
+               "noncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm).trans\n    (QuotientGroup.quotientKerEquivOfSurjective _ (phiE_surj s))).trans\n    (MulEquiv.prodCongr (eQQ s) (MulEquiv.refl _))",
+               "private noncomputable def eGamE₁ (s : ℕ) : GamE s ≃* (GalL (s + 2) ⧸ (phiE s).ker) :=\n  QuotientGroup.quotientMulEquivOfEq (phiE_ker s).symm\n\nset_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamE₂ (s : ℕ) : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n  QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)\n\nprivate noncomputable def eGamE₃ (s : ℕ) : (QQ s × ℤˣ × ℤˣ) ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  MulEquiv.prodCongr (eQQ s) (MulEquiv.refl (ℤˣ × ℤˣ))\n\nset_option maxHeartbeats 4000000 in\nnoncomputable def eGamE (s : ℕ) : GamE s ≃* Multiplicative (ZMod (2 ^ s)) × ℤˣ × ℤˣ :=\n  ((eGamE₁ s).trans (eGamE₂ s)).trans (eGamE₃ s)", 1)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          for rel, old, new in [
+              ("Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean",
+               "Finset.prod_le_prod (fun _ _ => by linarith)", "Finset.prod_le_prod₀ (fun _ _ => by linarith)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => zero_le_one)", "Finset.prod_le_prod₀ (fun _ _ => zero_le_one)"),
+              ("Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/TuranSecondMainTheoremPowerSumsUnitCoefficients.lean",
+               "Finset.prod_le_prod (fun _ _ => abs_nonneg _)", "Finset.prod_le_prod₀ (fun _ _ => abs_nonneg _)")
+          ]:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/GramBlock.lean","apply Finset.prod_le_one\n","apply Finset.prod_le_one₀\n"],["Formalism/GL3MeanSquares/HookFormulaTorsion/GlobalBoundRefinements.lean","    apply Finset.prod_le_prod\n    · intro ρ hρ","    apply Finset.prod_le_prod₀\n    · intro ρ hρ"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_one (fun j _ => hg0 j _)","Finset.prod_le_one₀ (fun j _ => hg0 j _)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","Finset.prod_le_prod (fun j _ => by split_ifs <;> positivity)","Finset.prod_le_prod₀ (fun j _ => by split_ifs <;> positivity)"],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        obtain ⟨hc1, hc⟩ := _root_.not_imp.1 hc\n        obtain ⟨hc2, hc⟩ := _root_.not_imp.1 hc","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructA.lean","  rw [hld, logDeriv_mul","  rw [hld]\n  change logDeriv ((fun w : ℂ => (w - ρ) ^ analyticOrderNatAt f ρ) * g) s = _\n  rw [logDeriv_mul"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))","  change logDeriv ((fun z : ℂ => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ)) * h) s = _\n  rw [logDeriv_mul (f := fun z => ∏ ρ ∈ Z, (φ ρ z) ^ (m ρ))"],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      conv_lhs => rw [e]\n      rw [logDeriv_mul","      conv_lhs => rw [e]\n      change logDeriv ((fun z : ℂ => ∏ w ∈ S, (z - w) ^ m w) * g) z = _\n      rw [logDeriv_mul"],["Formalism/SuccessiveMinima/SuccessiveMinimaProofs/MeasureEqCovolumeMulVolumeImage.lean","B.equivFunL.lipschitz.isBounded_image","B.equivFunL.toContinuousLinearMap.lipschitz.isBounded_image"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == 1, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/FinSup.lean","import Formalism.HarderNarasimhan.DegSupermodZ","import Formalism.HarderNarasimhan.DegSupermodZ\nimport Mathlib.Order.CompactlyGenerated.Basic",1],["Formalism/HermitianLattices/HermitianLatticesProofs/ShortVectors.lean","Finset.prod_le_prod (fun i _ => hc.le)","Finset.prod_le_prod₀ (fun i _ => hc.le)",1],["Formalism/HarderNarasimhan/HarderNarasimhanProofs/PlaceSplit.lean","(DistribMulAction.toLinearMap ℝ (ι → ℂ) (v.embedding (c : K)))","({ toFun := fun w => v.embedding (c : K) • w\n             map_add' := fun x y => smul_add _ _ _\n             map_smul' := fun a w => by\n               change v.embedding (c : K) • (a • w) = a • (v.embedding (c : K) • w)\n               exact smul_comm _ _ _ } : (ι → ℂ) →ₗ[ℝ] (ι → ℂ))",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LStructC.lean","    rw [h1, logDeriv_mul","    rw [h1]\n    change logDeriv (LFunction χ) s = logDeriv ((fun z : ℂ => z - 1) * LFunction χ) s - del1 χ / (s - 1)\n    rw [logDeriv_mul",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/NormLogDerivReflLe.lean","  rw [h6]\n  refine Finset.sum_congr","  rw [Finset.prod_fn] at h6\n  rw [h6]\n  refine Finset.sum_congr",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NormOneSubConjMul.lean","      rw [logDeriv_prod (f := fun w z => (z - w) ^ m w) (fun w hw => pow_ne_zero _ (hzw w hw))\n        (fun w hw => by fun_prop)]","      have hp := logDeriv_prod (f := fun w z => (z - w) ^ m w) (fun w hw => pow_ne_zero _ (hzw w hw))\n        (fun w hw => by fun_prop)\n      rw [Finset.prod_fn] at hp\n      rw [hp]",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/RayClassIdealCountEqNcardShiftedBinaryForm.lean","Equiv.setCongr hr","Set.equivOfEq hr",2],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/RayClassIdealCountEqNcardShiftedBinaryForm.lean","Equiv.setCongr_apply","Set.equivOfEq_apply",2],["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","    exact left_eq_mul.mp h","    apply Prod.ext\n    · apply Prod.ext\n      · have h1 := congrArg (fun g => g.1.1) h\n        change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).1.1 = _ * _ at h1\n        exact left_eq_mul.mp h1\n      · have h2 := congrArg (fun g => g.1.2) h\n        change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).1.2 = _ * _ at h2\n        exact left_eq_mul.mp h2\n    · have h3 := congrArg Prod.snd h\n      change (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).2 = _ * _ at h3\n      exact left_eq_mul.mp h3",1],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","dirChar (recMap e q d)","dirChar (N := hostN e q d) (H := HA e) (recMap e q d)",2],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","def ChConductor : Prop","set_option backward.isDefEq.respectTransparency false in\ndef ChConductor : Prop",1],["Formalism/SizeWindowBrackets/GaloisToProductIsIso.lean","def DirCharInjective : Prop","set_option backward.isDefEq.respectTransparency false in\ndef DirCharInjective : Prop",1],["Development/AutomorphicArithmetic/ThickFrames/MarkedGe.lean","        push_neg at hc\n        obtain ⟨hc1, hc2, hc⟩ := hc","        have notImp {p q : Prop} (hn : ¬ (p → q)) : p ∧ ¬ q := by\n          classical\n          refine ⟨?_, ?_⟩\n          · by_contra hp\n            exact hn (fun h => (hp h).elim)\n          · intro hq\n            exact hn (fun _ => hq)\n        obtain ⟨hc1, hc⟩ := notImp hc\n        obtain ⟨hc2, hc⟩ := notImp hc",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 8000000 in\nprivate noncomputable def eGamE₁","set_option maxHeartbeats 8000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₁",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/HarderNarasimhan/HarderNarasimhanProofs/FinSup.lean","CompleteLattice.WellFoundedGT.isSupFiniteCompact (Set.Iic L)","WellFoundedGT.isSupFiniteCompact (α := Set.Iic L)",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","def hostEll (e q d","set_option maxHeartbeats 2000000 in\nset_option backward.isDefEq.respectTransparency false in\ndef hostEll (e q d",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","LHost.dirChar (LHost.recMap e q d)","LHost.dirChar (N := LHost.hostN e q d) (H := LHost.HA e) (LHost.recMap e q d)",3],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/TensorBasis.lean","Finsupp.mapDomain_apply (fun x y h => by simpa using h)","Finsupp.mapDomain_apply_of_injective (fun x y h => by simpa using h)",1],["Formalism/HarderNarasimhan/HarderNarasimhanProofs/HtImage.lean","simp [Matrix.toEuclideanLin_apply]","rfl",1],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K g (Quotient.out (DoubleCoset.mk K K g))).mp","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := Quotient.out (DoubleCoset.mk K K g))).mp",2],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K s _).mpr","(DoubleCoset.eq (H := K) (K := K) (a := s) (b := Quotient.out c)).mpr",1],["Formalism/SatakeDualWeyl/KpqSubgroupCompact.lean","(DoubleCoset.eq K K g _).mpr","(DoubleCoset.eq (H := K) (K := K) (a := g) (b := (a : G) * g * b)).mpr",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NegReLogDerivPrincipalLFunctionLe.lean","  rw [hL, logDeriv_mul","  rw [hL]\n  change ‖logDeriv ((fun z : ℂ => ∏ p ∈ q.primeFactors, (1 - (p : ℂ) ^ (-z))) * riemannZeta) s - deriv riemannZeta s / riemannZeta s‖ ≤ Real.log ↑q\n  rw [logDeriv_mul",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/NegReLogDerivPrincipalLFunctionLe.lean","logDeriv_prod (f := fun (p : ℕ) (z : ℂ) => 1 - (p : ℂ) ^ (-z))","logDeriv_fun_prod (f := fun (p : ℕ) (z : ℂ) => 1 - (p : ℂ) ^ (-z))",1],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/ValBasic.lean","[Module.Free ℤ S] [Module.Finite ℤ S] (g : S ≃+* S)","[Module.Free ℤ S] [Module.Finite ℤ S] [Infinite S] (g : S ≃+* S)",1],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/IteratedDerivLogDerivDirichletLViaNearbyZeros.lean","Finset.prod_le_prod (fun _ _ => norm_nonneg _)","Finset.prod_le_prod₀ (fun _ _ => norm_nonneg _)",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/ExplicitFormula/LocalAbstract.lean","Finset.prod_le_prod (fun ρ _ =>","Finset.prod_le_prod₀ (fun ρ _ =>",1],["Development/AutomorphicArithmetic/ThickFrames/TilesLe.lean","prod_le_prod (fun s _ =>","prod_le_prod₀ (fun s _ =>",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","def PerHost (e q d","set_option backward.isDefEq.respectTransparency false in\ndef PerHost (e q d",1],["Formalism/SizeWindowBrackets/Chain2aCoreNoAnalytic.lean","(hostEll e q d chC).re","(hostEll e q d (chC (H := LHost.HA e))).re",1],["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      exact left_eq_mul.mp h3","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/LDrowLemmas.lean","rw [map_add, coeff_add, coeff_add, hp, hq, add_mul]","rw [map_add, rhCompatCoeffAdd, rhCompatCoeffAdd, hp, hq, add_mul]",1],["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLKBasis.lean","coeff d P","P.coeff d",3],["Development/AbelianVarietyTheory/Proofs/GlobalInterpolation/ArithmeticLargeSieveOneResidueClassPerPrime.lean","Nat.Coprime.mul ?_ ?_","(Nat.coprime_mul_iff_left.2 ⟨?_, ?_⟩)",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamE₂","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Development/AutomorphicArithmetic/IntegralCasts/CapelliIdentities/JumpSets.lean","      letI : IsLeftCancelMul (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        inferInstanceAs (IsLeftCancelMul ((ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ)))\n      exact left_eq_mul.mp h3","      letI : Group (UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e :=\n        (UpperTheory.Reformulated.B.JumpSetsAlt.galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      have hz1 : z = 1 := by\n        simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm\n      first\n      | simpa only [Prod.snd_one, z] using hz1\n      | change z = (1 : UpperTheory.Reformulated.B.JumpSetsAlt.HGrp e)\n        exact hz1\n      | rw [Prod.snd_one]\n        exact hz1",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","set_option maxHeartbeats 16000000 in\nset_option backward.isDefEq.respectTransparency false in\nprivate noncomputable def eGamE₂ (s : ℕ) : (GalL (s + 2) ⧸ (phiE s).ker) ≃* QQ s × ℤˣ × ℤˣ :=\n  QuotientGroup.quotientKerEquivOfSurjective (phiE s) (phiE_surj s)","private noncomputable def rhProdZpowersEquiv {A B : Type*} [CommGroup A] [CommGroup B]\n    (a : A) (ha : a ^ 2 = 1) :\n    ((A × B) ⧸ Subgroup.zpowers (a, (1 : B))) ≃* (A ⧸ Subgroup.zpowers a) × B := by\n  have hab : (a, (1 : B)) ^ 2 = 1 := by\n    apply Prod.ext\n    · simpa only [Prod.pow_mk, Prod.fst_one] using ha\n    · simp\n  have h : Subgroup.zpowers (a, (1 : B)) = (Subgroup.zpowers a).prod (⊥ : Subgroup B) := by\n    ext x\n    rcases x with ⟨x, y⟩\n    rw [mem_zpowers_sq hab, Subgroup.mem_prod, mem_zpowers_sq ha, Subgroup.mem_bot]\n    simp only [Prod.ext_iff, Prod.fst_one, Prod.snd_one]\n    tauto\n  exact (QuotientGroup.quotientMulEquivOfEq h).trans\n    ((QuotientGroup.prodMulEquiv (Subgroup.zpowers a) (⊥ : Subgroup B)).trans\n      (MulEquiv.prodCongr (MulEquiv.refl _) QuotientGroup.quotientBot))\n\nset_option maxHeartbeats 4000000 in\nprivate noncomputable def eGamEDirect (s : ℕ) : GamE s ≃* QQ s × ℤˣ × ℤˣ :=\n  @rhProdZpowersEquiv ((ZMod (2 ^ (s + 2)))ˣ) (ℤˣ × ℤˣ)\n    inferInstance inferInstance (-1) neg_one_sq_units",1],["Formalism/TameInertiaTowers/CentralOrderTwo/NegOneNeOneUnitsZmodFour.lean","((eGamE₁ s).trans (eGamE₂ s)).trans (eGamE₃ s)","(eGamEDirect s).trans (eGamE₃ s)",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding="utf-8")
+              assert t.count(old) == count, f"Unexpected pinned block: {rel}"
+              p.write_text(t.replace(old, new), encoding="utf-8")
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/GradedWeylDivisibility/FockSpaceTableaux/NablaLLe.lean","coeff d P","P.coeff d",3],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","(by simp [sq])) (by simp [sq])","(by simp [sq])) (by\n      simp [sq] <;> first\n        | rfl\n        | exact (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).mul_one 1)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CoprimeTwoPow.lean","ZMod.lift (2 ^ e) ⟨f0, hf0⟩","ZMod.lift (2 ^ e) (A := Additive (HGrp e)) ⟨f0, hf0⟩",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/FrobMulInertia.lean","    have := hmulE 1 1\n    rw [mul_one] at this\n    exact (mul_eq_left.mp this.symm)","    have := hmulE 1 1\n    rw [mul_one] at this\n    apply Prod.ext\n    · apply Prod.ext\n      · have h1 := congrArg (fun g => g.1.1) this\n        change (galE e ζ a b 1).1.1 = _ * _ at h1\n        exact left_eq_mul.mp h1\n      · have h2 := congrArg (fun g => g.1.2) this\n        change (galE e ζ a b 1).1.2 = _ * _ at h2\n        exact left_eq_mul.mp h2\n    · have h3 := congrArg Prod.snd this\n      letI : Group (HGrp e) :=\n        (QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))).toGroup\n      let z : HGrp e := (galE e ζ a b 1).2\n      have hz : z = z * z := h3\n      have hh := congrArg (fun t => z⁻¹ * t) hz\n      have hz1 : z = 1 := by\n        simpa only [inv_mul_cancel, inv_mul_cancel_left] using hh.symm\n      first\n      | simpa only [Prod.snd_one, z] using hz1\n      | change z = (1 : HGrp e)\n        exact hz1\n      | rw [Prod.snd_one]\n        exact hz1",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardExtendedGaloisGroup.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupCardExtendedGaloisGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardTrivialFirstComponent.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupCardTrivialFirstComponent (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupDecomp (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupOrbits (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Inertia.lean","(by rw [Ideal.comap_bot_of_injective _ hinj]; exact bot_le)","(by\n      change Ideal.comap (algebraMap (𝓞 (hostE ζ a b)) (𝓞 L)) (⊥ : Ideal (𝓞 L)) ≤ P\n      rw [Ideal.comap_bot_of_injective _ hinj]\n      exact bot_le)",2],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","(isIntegral_algebraMap_iff (algebraMap (hostE ζ a b) L).injective).mp (hζint.add hζiint)","(isIntegral_algHom_iff (IsScalarTower.toAlgHom ℤ (hostE ζ a b) L)\n      (algebraMap (hostE ζ a b) L).injective).mp (hζint.add hζiint)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Decomp.lean","      · simp [e2]","      · simp [e2] <;> first | exact one_mul _ | exact (rhHGrpCommGroupDecomp e).one_mul _",2],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","    · ext <;> simp [cc, c0, h, hi.neg_one_pow, hτ2]","    · ext <;> simp [cc, c0, h, hi.neg_one_pow, hτ2] <;> first | exact one_mul _ | exact (rhHGrpCommGroupOrbits e).one_mul _",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Orbits.lean","(fun x y hxy => by simpa using hxy)","(fun x y hxy => by\n    have hh := congrArg Prod.snd hxy\n    change x * τ.2 = y * τ.2 at hh\n    exact mul_right_cancel hh)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/CardTrivialFirstComponent.lean","⟨⟨fun σ τ => hbijE.1 (by rw [hmulE, hmulE, mul_comm])⟩⟩","⟨⟨fun σ τ => hbijE.1 (by\n      rw [hmulE, hmulE]\n      exact mul_comm _ _)⟩⟩",1],["Formalism/GradedWeylDivisibility/StatementE.lean","coeff e F","F.coeff e",1],["Formalism/GradedWeylDivisibility/StatementE.lean","coeff e Q","Q.coeff e",1],["Formalism/SharpRestriction/LevelLetterCocycles/DataN.lean","def etaLoc (i : N.Loc) : ℚ :=\n  lenUnit (O := N.O i) (N.l i) (↥(N.MtUp i) ⧸ (N.MtLow i).comap (N.MtUp i).subtype)","set_option backward.isDefEq.respectTransparency false in\ndef etaLoc (i : N.Loc) : ℚ := by\n  letI : AddCommGroup (↥(N.MtUp i)) := inferInstance\n  letI : Module (N.O i) (↥(N.MtUp i)) := inferInstance\n  exact lenUnit (O := N.O i) (N.l i) (↥(N.MtUp i) ⧸ (N.MtLow i).comap (N.MtUp i).subtype)",1],["Development/AbelianVarietyTheory/Proofs/IwasawaDecomposition/NormOneIffOfSqrt.lean","(isIntegral_algebraMap_iff (algebraMap ℚ E).injective).1 hq","isIntegral_algebraMap_iff.mp hq",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupOrbitSg (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","  refine Prod.ext ?_ h2","  refine Prod.ext ?_ (by first | exact h2 | exact mul_right_cancel (a := t) (b := t') h2 | exact (rhHGrpCommGroupOrbitSg e).toGroup.mul_right_cancel _ _ _ h2 | exact mul_right_cancel h2)",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","namespace Formalism.FrobeniusOrbits\n","namespace Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhHGrpCommGroupPrincipal (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","    rw [galE_mul hqd h, galE_mul hqd h, mul_comm]","    rw [galE_mul hqd h, galE_mul hqd h]\n    exact mul_comm (galE e ζ a b σ) (galE e ζ a b (τ.restrictScalars ℚ))",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","rw [isIntegral_algebraMap_iff (algebraMap (KinE ζ a b) (hostE ζ a b)).injective]","have ht : IsIntegral ℤ (algebraMap (KinE ζ a b) (hostE ζ a b) t) ↔ IsIntegral ℤ t := by\n      first\n      | exact isIntegral_algebraMap_iff\n      | exact isIntegral_algHom_iff (IsScalarTower.toAlgHom ℤ (KinE ζ a b) (hostE ζ a b))\n          (algebraMap (KinE ζ a b) (hostE ζ a b)).injective\n    rw [ht]",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/Principal.lean","(show c0 * c0 = (1 : G0) by decide) (mul_one _)","(show c0 * c0 = (1 : G0) by decide) (by\n      change (1 : HGrp e) * 1 = 1\n      exact (rhHGrpCommGroupPrincipal e).mul_one 1)",1],["Formalism/SharpRestriction/LevelLetterCocycles/QuotientHomNonvanishingBound.lean","MvPolynomial.coeff d (Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C))","AddMonoidAlgebra.coeff (Matrix.det (∑ k,\n        (MvPolynomial.X k : MvPolynomial (Fin m) (N.O i)) • (a k x').map MvPolynomial.C) : MvPolynomial (Fin m) (N.O i)) d",1],["Formalism/LocalRingCardinality/DataKerI.lean","MvPolynomial.coeff μ P","P.coeff μ",1],["Formalism/FrobeniusOrbits/FrobeniusOrbitsProofs/OrbitSg.lean","  rw [hpl, Set.range_comp, Set.ncard_image_of_injective _ (emb_injective τ),\n    ← Submonoid.coe_powers, ← Nat.card_coe_set_eq, SetLike.coe_sort_coe, Nat.card_submonoidPowers,\n    hord, Prod.orderOf, orderOf_negOne]","  rw [hpl, Set.range_comp, Set.ncard_image_of_injective _ (emb_injective τ)]\n  let z : ℤˣ × HGrp e := (-1, φ.2)\n  change (Set.range (fun i : ℕ => z ^ i)).ncard = orderOf φ\n  rw [show Set.range (fun i : ℕ => z ^ i) = (Submonoid.powers z : Set (ℤˣ × HGrp e)) from\n    (Submonoid.coe_powers z).symm, ← Nat.card_coe_set_eq]\n  calc\n    _ = orderOf z := by\n      change Nat.card ↥(Submonoid.powers z) = orderOf z\n      exact Nat.card_submonoidPowers\n    _ = orderOf φ := by\n      change orderOf ((-1 : ℤˣ), φ.2) = orderOf φ\n      rw [Prod.orderOf, orderOf_negOne, hord]",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              t = p.read_text(encoding='utf-8')
+              assert t.count(old) == count, f'Unexpected pinned block: {rel}'
+              p.write_text(t.replace(old, new), encoding='utf-8')
+          PY
+      - name: Apply four local compatibility repairs
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/FrameFacts.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhFrameHGrpCommGroup (e : ℕ) : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/FrameFacts.lean","theorem thick_part_two ","set_option maxHeartbeats 2000000 in\ntheorem thick_part_two ",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","namespace D7\n","namespace D7\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhArtinHGrpCommGroup (e : ℕ) : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","  art_h := fun u v hv => (hH_ggIso φ hinj _).trans (artinMap_dyadic_eq φ.e hH u v hv)","  art_h := fun u v hv => by\n    change φ.hH (ggIso φ hinj (art0 φ.e hH u)).2 = hcl φ.e v\n    exact (hH_ggIso φ hinj _).trans (artinMap_dyadic_eq φ.e hH u v hv)",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSym.lean","    rw [← map_pow, MulEquiv.map_eq_one_iff]\n    refine Prod.ext (Prod.ext (Int.units_sq _) (Int.units_sq _)) ?_\n    show (art0 φ.e hH u).2 ^ 2 = 1\n    rw [h2, one_pow]","    rw [← map_pow]\n    have hs : art0 φ.e hH u ^ 2 = 1 := by\n      refine Prod.ext (Prod.ext (Int.units_sq _) (Int.units_sq _)) ?_\n      show (art0 φ.e hH u).2 ^ 2 = 1\n      rw [h2, one_pow]\n    exact (congrArg (ggIso φ hinj) hs).trans (ggIso φ hinj).map_one",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/KcDiffSmulMem.lean","isIntegral_algebraMap_iff (algebraMap H.K H.E).injective","isIntegral_algebraMap_iff",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/HostFacts.lean","Nat.Coprime.mul H.coprime_QS_d H.coprime_q_d","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨H.coprime_QS_d, H.coprime_q_d⟩",1],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/HostFacts.lean","Nat.Coprime.mul H.coprime_QS_q H.coprime_q_d.symm","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨H.coprime_QS_q, H.coprime_q_d.symm⟩",1],["Formalism/GL3MeanSquares/HookFormulaTorsion/DifferentIdealConditions.lean","  have := (Psi e).mul_mem hτΨ hmem\n  rw [mul_inv_cancel_left] at this\n  exact cc_not_mem e this","  letI : CommGroup (Formalism.FrobeniusOrbits.HGrp e) :=\n    QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n  have hprod := (Psi e).mul_mem hτΨ hmem\n  exact cc_not_mem e (by\n    first\n    | simpa only [mul_inv_cancel_left] using hprod\n    | have hc' : galE e ζ a b (τ.restrictScalars ℚ) *\n          ((galE e ζ a b (τ.restrictScalars ℚ))⁻¹ * cc e) = cc e := by\n        exact mul_inv_cancel_left _ _\n      exact hc' ▸ hprod)",1]]
+          for rel, old, new, count in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == count, (rel, old, s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Apply two exact observed compatibility fixes
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SizeWindowBrackets/ChainSlopeWindows/LipschitzWeightAndMinimum.lean","Finset.prod_le_one (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)","Finset.prod_le_one₀ (fun _ _ => norm_nonneg _) (fun p _ => norm_cosetMean_le _ _ _)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/ArtinMapSecondEqJacobiSymOfModEq.lean","Nat.Coprime.mul (cop_2d e hH) (cop_qd hH)","by\n    rw [Nat.coprime_mul_iff_left]\n    exact ⟨cop_2d e hH, cop_qd hH⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel, s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Repair two inertia modules at observed roots
+        working-directory: upstream/lean
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharFrame.lean","(Nat.Coprime.mul hac hbc)","(Nat.coprime_mul_iff_left.mpr ⟨hac,hbc⟩)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharFrame.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhOfCharHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/CycGrp.lean","Nat.Coprime.mul (Nat.Coprime.coprime_mul_left_right H.QS_coprime) hq","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.coprime_mul_left_right H.QS_coprime, hq⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Repair verified source occurrences and identical group instance root
+        id: repair
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/AnyFrame.lean","open Formalism.FrobeniusOrbits\n","open Formalism.FrobeniusOrbits\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhAnyFrameHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharLevel.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ h2) hc","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ h2, hc⟩"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/OfCharLevel.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ (by decide)) h","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ (by decide), h⟩"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/NonemptyFieldAxiomsCyclicPow.lean","Nat.Coprime.mul (Nat.Coprime.pow_left _ ((Nat.coprime_primes Nat.prime_two hdp).mpr (Ne.symm hd2)))\n        ((Nat.coprime_primes hqp hdp).mpr hqd)","Nat.coprime_mul_iff_left.mpr ⟨Nat.Coprime.pow_left _ ((Nat.coprime_primes Nat.prime_two hdp).mpr (Ne.symm hd2)),\n        (Nat.coprime_primes hqp hdp).mpr hqd⟩"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Patch only three residual errors
+        id: residual
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/InertiaGaloisSymmetry/AnyFrame.lean","  · rw [w_neg_one, hH_toA, cl_neg_one]\n    rfl","  · rw [w_neg_one, hH_toA, cl_neg_one] <;> rfl"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhEqPowHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","(show c0 * ((1, -1) : G0) = (-1, 1) by decide) (mul_one _)","(show c0 * ((1, -1) : G0) = (-1, 1) by decide) (by change (1 : HGrp e) * 1 = 1; exact mul_one _)"],["Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/EqOfPowEqOne.lean","(show ((-1, 1) : G0) * (-1, 1) = 1 by decide) (mul_one _)","(show ((-1, 1) : G0) * (-1, 1) = 1 by decide) (by change (1 : HGrp e) * 1 = 1; exact mul_one _)"]]
+          for rel, old, new in edits:
+              p = Path(rel)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (rel,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Consolidate verified Galois roots and explicit character arguments
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SizeWindowBrackets/ChainSlopeWindows/GaloisMapComplexConjugation.lean")
+          s = p.read_text(encoding='utf-8')
+          edits = [["open Formalism Formalism.D5 Formalism.LFunctionChainParameters.characterSumData\n","open Formalism Formalism.D5 Formalism.LFunctionChainParameters.characterSumData\n\nset_option backward.isDefEq.respectTransparency false\nset_option maxHeartbeats 2000000\n\nlocal instance rhGaloisHGrpCommGroup (e : ℕ) : CommGroup (FrobeniusOrbits.HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n",1],["  mem_inertia_iff q d (recMap e q d) p x","  mem_inertia_iff (H := HA e) q d (recMap e q d) p x",1],["(chC : AddChar (E0 × HA e) ℂ)","(chC (H := HA e) : AddChar (E0 × HA e) ℂ)",3],["(i • (hostData e q d).frob p) chC","(i • (hostData e q d).frob p) (chC (H := HA e))",1],["(recMap e q d) chC","(recMap e q d) (chC (H := HA e))",7],["dirChar (recMap e q d) (chC (H := HA e))","dirChar (H := HA e) (recMap e q d) (chC (H := HA e))",4],["dirChar_unit (recMap e q d)","dirChar_unit (H := HA e) (recMap e q d)",2],["dirChar (recMap e q d) ψ","dirChar (H := HA e) (recMap e q d) ψ",2]]
+          for old,new,count in edits:
+              assert s.count(old) == count, (old, s.count(old), count)
+              s = s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Repair cyclic power canonical group and hostDer timeout
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/SharpRestriction/RamificationFrobenius/TotientGaloisClasses/NonemptyFieldAxiomsCyclicPow.lean")
+          s = p.read_text(encoding='utf-8')
+          for old,new in [["open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n","open Formalism.FrobeniusOrbits Formalism.TwoAdicCyclotomicDecomposition\n\nset_option backward.isDefEq.respectTransparency false\n\nlocal instance rhCyclicPowHGrpCommGroup (e : ℕ) : CommGroup (HGrp e) :=\n  QuotientGroup.Quotient.commGroup (Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ))\n"],["theorem hostDer : HostDer","set_option maxHeartbeats 2000000 in\ntheorem hostDer : HostDer"]]:
+              assert s.count(old) == 1, old
+              s = s.replace(old,new,1)
+          old = "    rw [h1, HostRaw.psAt, dif_pos (show Nat.Coprime p (hostRaw φ hinj hH he h).condN from hcop)]\n    rfl"
+          new = "    rw [h1, HostRaw.psAt, dif_pos (show Nat.Coprime p (hostRaw φ hinj hH he h).condN from hcop)] <;> rfl"
+          assert s.count(old) == 1
+          s = s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Apply exactly eight certified isolated patches
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          paths = json.loads("{\"002-anyframe\":\"Development/AutomorphicArithmetic/CoprimeRanks/AnyFramewindow.lean\",\"003-algebramap\":\"Formalism/LocalToGlobal/ProjectiveLattices/AlgebraMapCAt.lean\",\"004-height\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/HeightTheory/TheoremA.lean\",\"005-moebius\":\"Formalism/MoebiusJetDuality/Statement.lean\",\"006-dvr\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/DvrData.lean\",\"007-abproj\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/AbProj.lean\",\"008-unitary\":\"Development/AbelianVarietyTheory/Definitions/AutomorphicMembership/IsRationalUnitaryDeterminantMapRationalUnitaryTo.lean\",\"001-cocycle\":\"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/BirationalGeometry/ToroidalCompactification/CocycleRightZeroThd.lean\"}")
+          changes = json.loads("{\"002-anyframe\":[[\"private theorem ord_eq_mul (D : ModData)\",\"set_option backward.isDefEq.respectTransparency false in\\nprivate theorem ord_eq_mul (D : ModData)\",1],[\"      exact ⟨⟨D.eta.rangeRestrict u, hu⟩, rfl⟩\",\"      let v : D.R := @Subtype.mk (HGrp D.e × D.B) (fun z => z ∈ D.eta.range) (D.eta u) ⟨u, rfl⟩\\n      have hv : v ∈ D.p1.ker := by\\n        apply MonoidHom.mem_ker.mpr\\n        change D.cl u = 1\\n        exact MonoidHom.mem_ker.mp hu\\n      let w : ↥D.p1.ker := @Subtype.mk D.R (fun t => t ∈ D.p1.ker) v hv\\n      refine Exists.intro w ?_\\n      apply Subtype.ext\\n      change D.ξ u = D.ξ u\\n      rfl\",1]],\"003-algebramap\":[[\"fun p t y y' h => by simp [hf.2 p t y y' h]\",\"fun p t y y' h => by\\n       simp only [Pi.smul_apply, hf.2 p t y y' h]\\n       change c • (wchar e t * f p y) = wchar e t * (c • f p y)\\n       first\\n       | exact (mul_smul_comm (wchar e t) c (f p y)).symm\\n       | exact smul_comm c (wchar e t) (f p y)\\n       | rw [← smul_mul_assoc]\\n         exact mul_smul_comm _ _ _\\n       | change (algebraMap K p.R c) * (wchar e t * f p y) = wchar e t * ((algebraMap K p.R c) * f p y)\\n         ring\",1]],\"004-height\":[[\"    LenLE (Module.length R1 (M1 ⧸ N1.comap M1.subtype))\",\"    letI : AddCommGroup M1 := Submodule.addCommGroup M1\\n    letI : Module R1 M1 := Submodule.module M1\\n    letI : HasQuotient M1 (Submodule R1 M1) := Submodule.hasQuotient\\n    LenLE (Module.length R1 (M1 ⧸ N1.comap M1.subtype))\",1]],\"005-moebius\":[[\"coeff α f\",\"f.coeff α\",1],[\"coeff α P * coeff α F\",\"P.coeff α * F.coeff α\",1],[\"coeff (Multiset.toFinsupp (l : Multiset σ)) f\",\"f.coeff (Multiset.toFinsupp (l : Multiset σ))\",1]],\"006-dvr\":[[\"Ideal.bot_prime\",\"inferInstance\",1]],\"007-abproj\":[[\"    IsScalarTower.of_algebraMap_eq fun _ => rfl\",\"    by\\n      constructor\\n      intro r a p\\n      change (r • (a : MvPolynomial (Fin (N + 1)) R)) * p = r • ((a : MvPolynomial (Fin (N + 1)) R) * p)\\n      exact smul_mul_assoc r (a : MvPolynomial (Fin (N + 1)) R) p\",1],[\"MvPolynomial.coeff 0 p\",\"p.coeff 0\",1]],\"008-unitary\":[[\"(isIntegral_algebraMap_iff (algebraMap ℚ NegTwoField).injective).1 this\",\"isIntegral_algebraMap_iff.mp this\",1],[\"theorem relDetT_self (N : ℕ) (M : Submodule (𝓞 H.E) (Fin N → H.E)) : relDetT H N M M = 1 := by\\n  unfold relDetT\\n  simp\\n\",\"section RelDetSelfCompatibility\\n\\nlocal instance relDetDtGroup : CommGroup (DtT H) := QuotientGroup.Quotient.commGroup (KD H)\\nlocal instance relDetUOTNormal : (UOT H).Normal := inferInstance\\n\\nset_option backward.isDefEq.respectTransparency false in\\ntheorem relDetT_self (N : ℕ) (M : Submodule (𝓞 H.E) (Fin N → H.E)) : relDetT H N M M = 1 := by\\n  unfold relDetT\\n  simp only [sub_self, Int.toNat_zero, pow_zero, finprod_one]\\n  exact (congrArg (QuotientGroup.mk' (UOT H)) ((QuotientGroup.mk' (KD H)).map_one)).trans ((QuotientGroup.mk' (UOT H)).map_one)\\n\\nend RelDetSelfCompatibility\\n\",1]],\"001-cocycle\":[[\"pderiv R \",\"MvPowerSeries.pderiv (R := R) \",2]]}")
+          assert set(paths) == set(changes) and len(paths) == 8
+          for target in sorted(paths):
+              p = Path(paths[target])
+              s = p.read_text(encoding='utf-8')
+              for old,new,count in changes[target]:
+                  assert s.count(old) == count, (target,old,s.count(old),count)
+                  s = s.replace(old,new)
+              p.write_text(s,encoding='utf-8')
+              print("PATCH",target,p)
+          PY
+      - name: Repair one observed rank dependency
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/LocalRingCardinality/RankBoundMonotoneInDimension.lean")
+          s = p.read_text(encoding='utf-8')
+          edits = [["theorem iotaH_bijective (e : ℕ)","set_option backward.isDefEq.respectTransparency false in\ntheorem iotaH_bijective (e : ℕ)"],["    rw [pow_inj_mod, orderOf_unit_class_eq_two_pow e, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hij\n    exact ZMod.val_injective _ hij","    let g : (ZMod (2 ^ (e + 2)))ˣ ⧸ Subgroup.zpowers (-1 : (ZMod (2 ^ (e + 2)))ˣ) := hcl e (u5 (e + 2))\n    have hg : g ^ i.val = g ^ j.val := by\n      exact hij\n    have hm := (pow_inj_mod (x := g) (n := i.val) (m := j.val)).mp hg\n    have ho : orderOf g = 2 ^ e := by\n      exact orderOf_unit_class_eq_two_pow e\n    rw [ho, Nat.mod_eq_of_lt (ZMod.val_lt i), Nat.mod_eq_of_lt (ZMod.val_lt j)] at hm\n    exact ZMod.val_injective _ hm"]]
+          for old,new in edits:
+              assert s.count(old) == 1, (old,s.count(old))
+              s = s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Apply verified producer patches and candidate 016
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          edits = [["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/ExistsPowSmulMemBall.lean","  IsLocalRing.eq_maximalIdeal (Ideal.isMaximal_comap_of_isIntegral_of_isMaximal ζ.asIdeal)","  IsLocalRing.eq_maximalIdeal (Ideal.isMaximal_under_of_isIntegral_of_isMaximal (R := O) ζ.asIdeal)"],["Formalism/LogVandermondeBounds/LogVandermondeProofs/BlockDimensionIdentities.lean","Finset.prod_le_one (fun i hi => (hfac i hi).1) (fun i hi => (hfac i hi).2)","Finset.prod_le_one₀ (fun i hi => (hfac i hi).1) (fun i hi => (hfac i hi).2)"],["Formalism/LocalToGlobal/NormalizedHeckeFactors/CoverAlg.lean","Algebra.adjoinCommRingOfComm O fun a ha b hb => (hS a ha b hb).eq","Algebra.adjoinCommRingOfComm O fun a ha b hb _ => hS a ha b hb"],["Formalism/GaussIdealIdentity/GaussIdealPrimality/GaussLocalizationLengthHolds.lean","((IsDiscreteValuationRing.TFAE A hnf).out 0 4).2 hp","((IsDiscreteValuationRing.TFAE A hnf).out 1 5).2 hp"],["Development/AbelianVarietyTheory/Proofs/HermitianTraceForms/IsLocallyConstantRankAtStalkEigenSub.lean","    rw [RingHom.comap_ker, ← RingHom.injective_iff_ker_eq_bot]","    change Ideal.comap (algebraMap ℤ (𝓞 E)) (RingHom.ker ((algebraMap S L).comp (σ i))) = ⊥\n    rw [RingHom.comap_ker, ← RingHom.injective_iff_ker_eq_bot]"],["Formalism/FilteredPoleLength/LocalDescentLevels/LatticeIndexBis.lean","    rw [IsBaseChange.basis_apply, Module.Basis.coe_extend]\n    rfl","    rw [IsBaseChange.basis_apply, Module.Basis.coe_extend] <;> rfl"],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/LatticeTransference/Poisson.lean","(continuous_add_right _)","(continuous_id.add continuous_const)"],["Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/ExistsResEqOfUnitInChart.lean","        simp [TrivSqZeroExt.snd_sum, map_sum, mul_assoc, ha]\n        exact Finset.sum_congr rfl fun i _ => mul_comm _ _","        simp [TrivSqZeroExt.snd_sum, map_sum, mul_assoc, ha] <;>\n          exact Finset.sum_congr rfl fun i _ => mul_comm _ _"],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/YoungDiagramHook.lean","    apply Finset.prod_le_prod (fun _ _ => Nat.zero_le _)","    apply Finset.prod_le_prod"],["Formalism/LocalToGlobal/Divisibility/ProjLemmas.lean","(isIntegral_algebraMap_iff (algebraMap K (AlgebraicClosure K)).injective).mp h2","isIntegral_algebraMap_iff.mp h2"],["Formalism/GaussJetBounds/GaussJetProofs/NormNatCastEqPowPadicValNat.lean","Finset.prod_le_prod (fun i _ => norm_nonneg _) hcoord","Finset.prod_le_prod₀ (fun i _ => norm_nonneg _) hcoord"],["Formalism/GaloisIrreducibility/GaloisIrreducibilityProofs/FewLargeParts.lean","Finset.prod_lt_prod_of_nonempty (fun _ _ => hB) hlarge hne","Finset.prod_lt_prod_of_nonempty₀ (fun _ _ => hB) hlarge hne"],["Formalism/GaussIdealIdentity/GaussIdealPrimality/GaussLocalizationLengthHolds.lean","  have e1 := LinearEquiv.length_eq (TensorProduct.AlgebraTensorModule.congr\n    (LinearEquiv.refl (Localization.AtPrime (gaussIdeal σ O)) (Localization.AtPrime (gaussIdeal σ O))) e)","  let A := Localization.AtPrime (gaussIdeal σ O)\n  have ee : TensorProduct O A S ≃ₗ[A] TensorProduct O A (O ⧸ IsLocalRing.maximalIdeal O) :=\n    TensorProduct.AlgebraTensorModule.congr (LinearEquiv.refl A A) e\n  have e1 : Module.length A (TensorProduct O A S) = Module.length A (TensorProduct O A (O ⧸ IsLocalRing.maximalIdeal O)) :=\n    LinearEquiv.length_eq (R := A) ee"]]
+          for path,old,new in edits:
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              assert s.count(old) == 1, (path,s.count(old))
+              p.write_text(s.replace(old,new),encoding='utf-8')
+          PY
+      - name: Extract TopG predicate and hypothesis interface without terminal theorem
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("Development/AutomorphicArithmetic/CharacterBoxes/ZeroFreeAllOfTopG.lean")
+          s = p.read_text()
+          marker = "theorem eFamC_of_cls"
+          assert s.count(marker) == 1
+          h, t = s.split(marker, 1)
+          for imp in ["Development.AutomorphicArithmetic.PrimitiveCosets.LevelGmLeOnFamilyScales", "Development.AutomorphicArithmetic.PrimitiveCosets.Imports"]:
+              line = "import " + imp + "\n"
+              assert h.count(line) == 1
+              h = h.replace(line, "", 1)
+          q = p.with_name("RFHTopGInterface.lean")
+          q.write_text(h + "\nend UpperTheory.Top\n\nend\n")
+          assert "def TopG : Prop" in h and "theorem hypV_of_cls" in h
+          assert "zeroFreeAll_of_topG" not in h
+          shape = p.with_name("ShapeWin.lean")
+          ss = shape.read_text()
+          old = "import Development.AutomorphicArithmetic.CharacterBoxes.ZeroFreeAllOfTopG\n"
+          new = "import Development.AutomorphicArithmetic.CharacterBoxes.RFHTopGInterface\n"
+          assert ss.count(old) == 1
+          assert not any(n in ss for n in ["zeroFreeAll_of_topG","eFamC_of_cls"])
+          shape.write_text(ss.replace(old,new,1))
+          print("RFH: redirected ShapeWin to certified preterminal interface")
+          PY
+      - name: Materialize independent producer wrappers and preterminal literature
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          d = Path("Development/AutomorphicArithmetic/ThetaCorrespondence/ThetaPairLifts/ThirdPlaceSeries")
+          p = d / "EveryCharacterOfLiteratureOfVWin.lean"
+          s = p.read_text()
+          marker = "theorem UpperTheory.LiteratureTheorems.every_character_of_literature_of_vWin "
+          assert s.count(marker) == 1 and s.rstrip().endswith("end")
+          prefix = s.split(marker)[0]
+          terminal = "import Development.AutomorphicArithmetic.CharacterBoxes.RiemannHypothesisOfEveryCharacter\n"
+          assert prefix.count(terminal) == 1
+          prefix = prefix.replace(terminal, "")
+          extra = "import Development.AutomorphicArithmetic.ThetaCorrespondence.ThetaPairLifts.ThirdPlaceSeries.TopShape\nimport Development.AutomorphicArithmetic.Foundations.LocalLanglands.LocalCentralUnits.RecTExists\nimport Development.AutomorphicArithmetic.Foundations.GaloisRepresentations.IntegralStructures.RowSrc\n"
+          (d / "RFHLiteraturePrelude.lean").write_text(extra + prefix + "\nend\n")
+          for name in ["RFHTopGReduced.lean", "RFHVWinReduced.lean"]:
+              Path(name).write_text((Path("../../bridge") / name).read_text())
+          PY
+      - name: Candidate | three exact coefficient API repairs
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Formalism/GelfandTransference/Statement.lean")
+          s = p.read_text()
+          edits = [
+              ("coeff (Finsupp.equivFunOnFinite.symm (typ i)) P", "P.coeff (Finsupp.equivFunOnFinite.symm (typ i))"),
+              ("‖coeff e P‖", "‖P.coeff e‖"),
+              ("‖coeff e (aeval (rowSubst x₀ y z) F)‖", "‖(aeval (rowSubst x₀ y z) F).coeff e‖")
+          ]
+          for old, new in edits:
+              assert s.count(old) == 1, (old, s.count(old))
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+      - name: Micro API | coefficient on pinned Mathlib
+        working-directory: upstream/lean
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > RFHCoeffAPI.lean <<'LEAN'
+          import Mathlib
+          example {σ R : Type} [CommSemiring R] (p : MvPolynomial σ R) (e : σ →₀ ℕ) :
+              p.coeff e = p.coeff e := rfl
+          LEAN
+          lake env lean RFHCoeffAPI.lean 2>&1 | tee ../../bridge/assembly-logs/coeff-api.log
+      - name: Consolidate all four certified source patches
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, hashlib
+          base = Path("../../bridge/ci")
+          manifest = json.loads((base / "rfh_micro_repair_v5.json").read_text())
+          manifest.update(json.loads((base / "rfh_alwelldef_retry_v6.json").read_text()))
+          assert set(manifest) == {"evdualjet", "formalgroup", "latisprime", "alwelldef"}
+          for name, entry in sorted(manifest.items()):
+              p = Path(entry["file"])
+              s = p.read_text()
+              for old, new, count in entry["edits"]:
+                  assert s.count(old) == count, (name, p, old, s.count(old), count)
+                  s = s.replace(old, new)
+              p.write_text(s)
+              print("CONSOLIDATED", name, p, hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+      - name: Apply identical cumulative manifest to all twenty targets
+        working-directory: upstream/lean
+        shell: bash
+        env:
+          LOT: bridge
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, json
+          common = json.loads(r'''{"powsum":{"file":"Formalism/DegreeFormula/PointDegree/PowSum.lean","edits":[["[degFl, coeff_add, mul_add, Finset.sum_add_distrib]","[degFl, MvPolynomial.coeff_add, mul_add, Finset.sum_add_distrib]",1]]},"placebelow":{"file":"Formalism/LocalToGlobal/ProjectiveLattices/PlaceBelow.lean","edits":[["pderiv R (","pderiv (R := R) (",2]]},"connection":{"file":"ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/TaylorDiscriminants/ConnectionKillsSeries.lean","edits":[["pderiv k (","pderiv (R := k) (",5]]},"polymax":{"file":"ReciprocityTheory/CommutativeAlgebra/PolynomialHeights/PolyMax.lean","edits":[["Ideal.isMaximal_comap_of_isIntegral_of_isMaximal (R := S') (⊥ : Ideal (S ⧸ 𝔑))","Ideal.isMaximal_under_of_isIntegral_of_isMaximal (R := S') (⊥ : Ideal (S ⧸ 𝔑))",1],["  have heq : (⊥ : Ideal (S ⧸ 𝔑)).comap","  change (Ideal.comap (algebraMap S' (S ⧸ 𝔑)) (⊥ : Ideal (S ⧸ 𝔑))).IsMaximal at hbot\n  have heq : (⊥ : Ideal (S ⧸ 𝔑)).comap",1]]},"tangent":{"file":"Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/FormallyUnramifiedOfTangentMapInjective.lean","edits":[["(hex.split_tfae hinj hs).out 1 0","(hex.split_tfae hinj hs).out 2 1",1],["    induction z with\n    | zero => simp","    induction z using TensorProduct.induction_on with\n    | zero => simp",1]]},"ringintegers":{"file":"Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/FormallyUnramifiedRingOfIntegers.lean","edits":[["      induction z with\n      | zero => simp","      induction z using TensorProduct.induction_on with\n      | zero => simp",4],["    induction y with\n    | zero => simp","    induction y using TensorProduct.induction_on with\n    | zero => simp",1],["    induction z with\n    | zero => simp","    induction z using TensorProduct.induction_on with\n    | zero => simp",4],["      induction y with\n      | zero => simp","      induction y using TensorProduct.induction_on with\n      | zero => simp",1],["        induction z with\n        | zero => simp","        induction z using TensorProduct.induction_on with\n        | zero => simp",1],["  refine Ideal.eq_bot_of_comap_eq_bot (R := ℤ) ?_\n  rw [RingHom.comap_ker, ← RingHom.injective_iff_ker_eq_bot]","  refine Ideal.eq_bot_of_under_eq_bot (R := ℤ) ?_\n  change (RingHom.ker τ).comap (algebraMap ℤ (𝓞 K)) = ⊥\n  rw [RingHom.comap_ker, ← RingHom.injective_iff_ker_eq_bot]",1]]},"smoothprime":{"file":"Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/IsDomainAndIsIntegrallyClosedAtPrimeOfSmoothOfCo.lean","edits":[["    induction y with\n    | zero => exact ⟨0, by simp⟩","    induction y using TensorProduct.induction_on with\n    | zero => exact ⟨0, by simp⟩",1]]},"rulinst":{"file":"Formalism/LocalToGlobal/ProjectiveLattices/RulInst.lean","edits":[["instance (priority := high) rulesTower : IsScalarTower (𝓞 K) K (Rules pts) := inferInstance","set_option backward.isDefEq.respectTransparency false in\ninstance (priority := high) rulesTower : IsScalarTower (𝓞 K) K (Rules pts) := by\n  first\n  | infer_instance\n  | constructor\n    intro a b f\n    funext p y\n    exact smul_assoc a b (f p y)",1]]},"opensrange":{"file":"Development/AbelianVarietyTheory/Definitions/ShimuraVarieties/OpensRangeChartYSupOpensRangeChartZ.lean","edits":[["theorem bijective_awayEval_origin","set_option backward.isDefEq.respectTransparency false in\ntheorem bijective_awayEval_origin",1],["    ext1 j; fin_cases j <;> simp\n  have he : (W.map (awayConst W 1)).toProjective.Equation","    ext1 j; fin_cases j <;> simp\n    all_goals\n      apply HomogeneousLocalization.val_injective (Submonoid.powers (coord W 1))\n      simp only [HomogeneousLocalization.val_mul, HomogeneousLocalization.val_neg,\n        HomogeneousLocalization.val_one, neg_one_mul]\n  have he : (W.map (awayConst W 1)).toProjective.Equation",1],["    rw [← hc, WeierstrassCurve.Projective.equation_smul _ isUnit_one.neg]\n    exact equation_awayCoord W 1","    rw [← hc]\n    have hu : IsUnit (-1 : AwayRing W 1) := (isUnit_one : IsUnit (1 : AwayRing W 1)).neg\n    exact (WeierstrassCurve.Projective.equation_smul (awayCoord W 1) hu).mpr (equation_awayCoord W 1)",1],["instance finiteType_grading_zero : Algebra.FiniteType (grading W 0) (HomRing W) :=\n  have : IsScalarTower R (grading W 0) (HomRing W) := .of_algebraMap_eq fun _ => rfl","set_option maxHeartbeats 800000 in\ninstance finiteType_grading_zero : Algebra.FiniteType (grading W 0) (HomRing W) := by\n  letI : IsScalarTower R (grading W 0) (HomRing W) := by\n    first\n    | infer_instance\n    | exact IsScalarTower.of_algebraMap_eq (R := R) (S := ↥(grading W 0)) (A := HomRing W) (fun _ => rfl)\n    | constructor\n      intro r a b\n      change (r • a : ↥(grading W 0)).val * b = r • (a.val * b)\n      change (r • a.val) * b = r • (a.val * b)\n      exact smul_mul_assoc r a.val b\n  exact Algebra.FiniteType.of_restrictScalars_finiteType R (grading W 0) (HomRing W)",1],["  exact Algebra.FiniteType.of_restrictScalars_finiteType R (grading W 0) (HomRing W)\n  Algebra.FiniteType.of_restrictScalars_finiteType R (grading W 0) (HomRing W)","  exact Algebra.FiniteType.of_restrictScalars_finiteType R (grading W 0) (HomRing W)",1]]},"powobj":{"file":"Development/AbelianVarietyTheory/Definitions/ShimuraVarieties/PowObjGeometricallyConnected.lean","edits":[["\n  induction z with\n  | zero => simpa using one\n","\n  induction z using TensorProduct.induction_on with\n  | zero => simpa using one\n",1],["\n  induction z with\n  | zero => simp\n","\n  induction z using TensorProduct.induction_on with\n  | zero => simp\n",2],["\n    induction z with\n    | zero => simp\n","\n    induction z using TensorProduct.induction_on with\n    | zero => simp\n",6],["\n      induction w with\n      | zero => simp\n","\n      induction w using TensorProduct.induction_on with\n      | zero => simp\n",1],["\n    induction z with\n    | zero => simp only [map_zero]\n","\n    induction z using TensorProduct.induction_on with\n    | zero => simp only [map_zero]\n",2]]},"spanmumin":{"file":"Formalism/MeanHeightDescent/AverageDegreeBounds/SpanMuMin.lean","edits":[["Finset.prod_le_prod (fun v _ => by positivity)","Finset.prod_le_prod₀ (fun v _ => by positivity)",1]]},"peterson":{"file":"Formalism/LocalToGlobal/ProjectiveLattices/PetersonNormSubspace.lean","edits":[["def petersonNormSubspace {D : D7}","private def rfhRestrictedRd (U : Unf Xo c σ r) (Cs : Submodule c.F (Rul Xo c)) :\n    Cs →ₛₗ[σ] FDSec U.X where\n  toFun f := rdU U f.1\n  map_add' f g := by\n    change rdU U (f.1 + g.1) = _\n    exact (rdU U).map_add f.1 g.1\n  map_smul' a f := by\n    change rdU U (a • f.1) = _\n    exact (rdU U).map_smulₛₗ a f.1\n\nset_option maxHeartbeats 600000 in\ndef petersonNormSubspace {D : D7}",1],["((rdU U).comp Cs.subtype)","(rfhRestrictedRd U Cs)",2],["JMemL2 V σ (rfhRestrictedRd U Cs)","JMemL2 (C := ↥Cs) (X := U.X) V σ (rfhRestrictedRd U Cs)",1],["l2NormAlt V σ (rfhRestrictedRd U Cs)","l2NormAlt (C := ↥Cs) (X := U.X) V σ (rfhRestrictedRd U Cs)",1],["  dmet n (Module.finrank ℚ E / 2) r * l2NormAlt (C := ↥Cs) (X := U.X) V σ (rfhRestrictedRd U Cs) dict mu h f","  dmet n (Module.finrank ℚ E / 2) r * ‖(h f).toLp _‖",1]]},"hassekp":{"file":"Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/HasseKpAlgebraMapKl.lean","edits":[["pderiv A p (τ x)","pderiv (R := A) p (τ x)",2]]},"jacchart":{"file":"ReciprocityTheory/AnalyticForms/RegularLocalRings/JacChartA.lean","edits":[["theorem ker_evRing [IsLocalRing","set_option backward.isDefEq.respectTransparency false in\ntheorem ker_evRing [IsLocalRing",1],["  have : (RingHom.ker (evRing K hK)).IsMaximal :=","  letI : FunLike ((locR K p) →+* ℂ) (locR K p) ℂ := RingHom.instFunLike\n  letI : RingHomClass ((locR K p) →+* ℂ) (locR K p) ℂ := RingHom.instRingHomClass\n  have : (RingHom.ker (evRing K hK)).IsMaximal :=",1],["  exact IsLocalRing.eq_maximalIdeal this","  exact IsLocalRing.eq_maximalIdeal (I := RingHom.ker (evRing K hK)) this",1],["theorem max_eq_map [IsLocalRing","set_option backward.isDefEq.respectTransparency false in\ntheorem max_eq_map [IsLocalRing",1],["    exact Ideal.mul_mem_right _ _ (Ideal.mem_map_of_mem _ ha)","    letI : ((ptI p).map (psi p K)).IsTwoSided := by\n      constructor\n      intro a b hab\n      exact mul_comm b a ▸ Ideal.mul_mem_left _ b hab\n    exact Ideal.mul_mem_right _ _ (Ideal.mem_map_of_mem _ ha)",1],["theorem psi_mem_sq [IsLocalRing","set_option backward.isDefEq.respectTransparency false in\ntheorem psi_mem_sq [IsLocalRing",1],["theorem exists_of_psi_mem_sq [IsLocalRing","set_option backward.isDefEq.respectTransparency false in\ntheorem exists_of_psi_mem_sq [IsLocalRing",1],["theorem psi_mem_sq [IsLocalRing","private theorem rfh_map_sq {A B : Type*} [CommRing A] [CommRing B]\n    (f : A →+* B) (I : Ideal A) : I.map f ^ 2 = (I ^ 2).map f :=\n  (Ideal.map_pow f I 2).symm\n\ntheorem psi_mem_sq [IsLocalRing",1],["\ntheorem psi_mem_sq [IsLocalRing","\nset_option backward.isDefEq.respectTransparency false in\ntheorem psi_mem_sq [IsLocalRing",1],["← Ideal.map_pow","rfh_map_sq (psi p K) (ptI p)",2],["  have : (RingHom.ker (evRing K hK)).IsMaximal :=\n    RingHom.ker_isMaximal_of_surjective _ (fun c => ⟨psi p K (C c), by rw [evRing_psi, eval_C]⟩)\n  exact IsLocalRing.eq_maximalIdeal (I := RingHom.ker (evRing K hK)) this","  have hs : Function.Surjective (evRing K hK) := by\n    intro c\n    refine ⟨psi p K ((MvPolynomial.C : ℂ →+* MvPolynomial (Fin n) ℂ) c), ?_⟩\n    rw [evRing_psi, eval_C]\n  have hm : (RingHom.ker (evRing K hK)).IsMaximal :=\n    RingHom.ker_isMaximal_of_surjective (R := locR K p) (K := ℂ) (evRing K hK) hs\n  exact IsLocalRing.eq_maximalIdeal (R := locR K p) (I := RingHom.ker (evRing K hK)) hm",1],["private theorem rfh_map_sq {A B : Type*} [CommRing A] [CommRing B]","private theorem rfh_map_sq {A B : Type*} [CommSemiring A] [CommSemiring B]",1],["  rw [max_eq_map K hK, rfh_map_sq (psi p K) (ptI p)]\n","  have hsq : (Ideal.map (psi p K) (ptI p)) ^ 2 = Ideal.map (psi p K) (ptI p ^ 2) := by\n    exact rfh_map_sq (A := MvPolynomial (Fin n) ℂ) (B := locR K p) (psi p K) (ptI p)\n  rw [max_eq_map K hK, hsq]\n",1],["  rw [max_eq_map K hK, rfh_map_sq (psi p K) (ptI p), psi, ← Ideal.map_map] at hl\n","  have hsq : (Ideal.map (psi p K) (ptI p)) ^ 2 = Ideal.map (psi p K) (ptI p ^ 2) := by\n    exact rfh_map_sq (A := MvPolynomial (Fin n) ℂ) (B := locR K p) (psi p K) (ptI p)\n  rw [max_eq_map K hK, hsq, psi, ← Ideal.map_map] at hl\n",1],["  exact IsLocalRing.eq_maximalIdeal (R := locR K p) (I := RingHom.ker (evRing K hK)) hm","  exact IsLocalRing.eq_maximalIdeal hm",1],["set_option backward.isDefEq.respectTransparency false in\ntheorem psi_mem_sq [IsLocalRing","set_option maxHeartbeats 1500000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem psi_mem_sq [IsLocalRing",1],["set_option backward.isDefEq.respectTransparency false in\ntheorem exists_of_psi_mem_sq [IsLocalRing","set_option maxHeartbeats 1500000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem exists_of_psi_mem_sq [IsLocalRing",1],["    exact rfh_map_sq (A := MvPolynomial (Fin n) ℂ) (B := locR K p) (psi p K) (ptI p)","    letI : CommSemiring (MvPolynomial (Fin n) ℂ) := (inferInstance : CommRing (MvPolynomial (Fin n) ℂ)).toCommSemiring\n    letI : CommSemiring (locR K p) := (inferInstance : CommRing (locR K p)).toCommSemiring\n    exact @rfh_map_sq (MvPolynomial (Fin n) ℂ) (locR K p) ‹CommSemiring (MvPolynomial (Fin n) ℂ)› ‹CommSemiring (locR K p)› (psi p K) (ptI p)",2],["set_option maxHeartbeats 1500000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem psi_mem_sq","set_option maxHeartbeats 1500000 in\ntheorem psi_mem_sq",1],["set_option maxHeartbeats 1500000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem exists_of_psi_mem_sq","set_option maxHeartbeats 1500000 in\ntheorem exists_of_psi_mem_sq",1],["    letI : CommSemiring (MvPolynomial (Fin n) ℂ) := (inferInstance : CommRing (MvPolynomial (Fin n) ℂ)).toCommSemiring\n    letI : CommSemiring (locR K p) := (inferInstance : CommRing (locR K p)).toCommSemiring\n    exact @rfh_map_sq (MvPolynomial (Fin n) ℂ) (locR K p) ‹CommSemiring (MvPolynomial (Fin n) ℂ)› ‹CommSemiring (locR K p)› (psi p K) (ptI p)","    letI : CommSemiring (MvPolynomial (Fin n) ℂ) := inferInstance\n    letI : CommSemiring (locR K p) := Ideal.Quotient.commSemiring (Ideal.map (algebraMap (MvPolynomial (Fin n) ℂ) (localization₂ p)) K)\n    first\n    | with_reducible_and_instances exact rfh_map_sq (A := MvPolynomial (Fin n) ℂ) (B := locR K p) (psi p K) (ptI p)\n    | exact rfh_map_sq (A := MvPolynomial (Fin n) ℂ) (B := locR K p) (psi p K) (ptI p)",2],["set_option backward.isDefEq.respectTransparency false in\ntheorem ker_evRing","set_option maxHeartbeats 1800000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem ker_evRing",1],["  exact IsLocalRing.eq_maximalIdeal hm","  let I : Ideal (locR K p) := RingHom.ker (evRing K hK)\n  change I = maximalIdeal (locR K p)\n  have hI : I.IsMaximal := hm\n  first\n  | apply IsLocalRing.eq_maximalIdeal\n    exact hI\n  | exact @IsLocalRing.eq_maximalIdeal (locR K p)\n      (Ideal.Quotient.commSemiring (Ideal.map (algebraMap (MvPolynomial (Fin n) ℂ) (localization₂ p)) K))\n      ‹IsLocalRing (locR K p)› I hI\n  | with_reducible_and_instances exact (IsLocalRing.isMaximal_iff (I := I)).mp hI",1]]},"fixedcoeff":{"file":"Development/AbelianVarietyTheory/Definitions/AutomorphicMembership/FixedCoefficientFieldInComplex.lean","edits":[["by rw [mul_comm, mul_smul, h0, smul_zero]","by\n      rw [mul_comm, mul_smul, h0]\n      exact nsmul_zero k",1]]}}''')
+          local = {}
+          for name, entry in list(common.items()):
+              p = Path(entry['file'])
+              s = p.read_text()
+              for old, new, count in entry['edits']:
+                  assert s.count(old) == count, (name, p, old, s.count(old), count)
+                  s = s.replace(old, new)
+              if entry['edits']:
+                  p.write_text(s)
+              print('ROOT_PATCH', name, p, len(entry['edits']))
+          if 'jacchart' in common:
+              p = Path(common['jacchart']['file'])
+              s = p.read_text()
+              anchor = 'set_option backward.isDefEq.respectTransparency false in\nprivate theorem rfh_map_sq'
+              assert s.count(anchor) == 1
+              before, after = s.split(anchor)
+              assert 'private ' not in before
+              pre = p.with_name('JacChartARFHPrelude.lean')
+              pre.write_text(before + 'end\n\nend ReciprocityTheory.AnForm.R.JacobianCriterionAlt\n')
+              p.write_text('import ReciprocityTheory.AnalyticForms.RegularLocalRings.JacChartARFHPrelude\n\nnamespace ReciprocityTheory.AnForm.R.JacobianCriterionAlt\n\nopen MvPolynomial IsLocalRing\n\nnoncomputable section\n\nvariable {n : ℕ} {p : Fin n → ℂ} (K : Ideal (MvPolynomial (Fin n) ℂ))\n\n' + anchor + after)
+              print('SPLIT_JAC', len(pre.read_text().splitlines()), len(p.read_text().splitlines()))
+          PY
+      - name: Apply exact V20 observed API repairs
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Lemmata/DetNormLeProdRows/DetNormLeProdRows.lean","apply Finset.prod_le_prod (fun i _ => norm_nonneg _)","apply Finset.prod_le_prod₀ (fun i _ => norm_nonneg _)",1],["ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/TaylorDiscriminants/ChartChg.lean","pderiv k (","pderiv (R := k) (",4]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V21_PATCH", file, count)
+          PY
+      - name: Apply exact V21 observed API and instance repairs
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Formalism/GelfandTransference/HadamardGelfand/Hadamard.lean","Finset.prod_le_prod (fun i _ => Finset.sum_nonneg","Finset.prod_le_prod₀ (fun i _ => Finset.sum_nonneg",1],["Formalism/MoebiusJetDuality/StatementS.lean","coeff α P * partialPow","P.coeff α * partialPow",1],["Formalism/MoebiusJetDuality/StatementS.lean","= coeff α F","= F.coeff α",1],["Formalism/LocalToGlobal/ProjectiveLattices/L2DefiniteCuspForms.lean","variable (U)\n\ndef rdC","variable (U)\n\nset_option synthInstance.maxHeartbeats 200000 in\nlocal instance (priority := high) rfhCuspModule (a : (E →+* ℂ) × ℕ → ℕ) (n : ℕ) :\n    Module c.F (cusp Xo c U a n) := (cusp Xo c U a n).module\n\nset_option synthInstance.maxHeartbeats 200000 in\ndef rdC",1],["Formalism/LocalToGlobal/ProjectiveLattices/L2DefiniteCuspForms.lean","  (rdU (U σ)).comp (cusp Xo c U a n).subtype","  { toFun := fun f => rdU (U σ) f.1\n    map_add' := fun f g => (rdU (U σ)).map_add f.1 g.1\n    map_smul' := fun x f => (rdU (U σ)).map_smulₛₗ x f.1 }",1],["Formalism/LocalToGlobal/ProjectiveLattices/L2DefiniteCuspForms.lean","variable {D : D7} (σ : c.F →+* ℂ)","set_option synthInstance.maxHeartbeats 200000\nset_option maxHeartbeats 1500000\n\nvariable {D : D7} (σ : c.F →+* ℂ)",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V22_PATCH", file, count)
+          PY
+      - name: Apply exact V22 observed compatibility repairs
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          edits = json.loads(r'''[["Development/AbelianVarietyTheory/Counterexamples/HeightSurvey/EmbRelExistsUnique.lean","    induction z with","    induction z using TensorProduct.induction_on with",1],["Formalism/LogVandermondeBounds/LogVandermondeProofs/InterlacingSeparation.lean","prod_le_prod","prod_le_prod₀",3],["Formalism/LogVandermondeBounds/LogVandermondeProofs/GammaIntegralPolynomialBound.lean","prod_le_prod","prod_le_prod₀",5],["Formalism/LogVandermondeBounds/LogVandermondeProofs/VandNSuccRight.lean","prod_le_prod","prod_le_prod₀",7],["Formalism/LogVandermondeBounds/LogVandermondeProofs/UpperPlaceHolds.lean","prod_le_prod","prod_le_prod₀",6],["Formalism/GL3MeanSquares/HookFormulaTorsion/DimensionMassJointBound.lean","prod_le_prod","prod_le_prod₀",3],["Formalism/GL3MeanSquares/HookFormulaTorsion/GaussianIntegralFormula.lean","prod_le_prod","prod_le_prod₀",4],["Formalism/GL3MeanSquares/HookFormulaTorsion/HolderExponentialMoments.lean","prod_le_prod","prod_le_prod₀",1],["Formalism/GL3MeanSquares/HookFormulaTorsion/DimensionMassJointBound.lean","prod_le_one","prod_le_one₀",2]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              if old.startswith("prod_"):
+                  pattern = r"(?<![\w])" + re.escape(old) + r"(?![\w₀])"
+                  s, n = re.subn(pattern, new, s)
+              else:
+                  n = s.count(old)
+                  s = s.replace(old, new)
+              assert n == count, (file, old, n, count)
+              p.write_text(s)
+              print("V23_PATCH", file, old, n)
+          PY
+      - name: Split TopG literature into bounded source modules
+        if: false
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json, hashlib
+          base = "Development.AutomorphicArithmetic.ThetaCorrespondence.ThetaPairLifts.ThirdPlaceSeries"
+          d = Path(base.replace('.', '/'))
+          p = d / "RFHLiteraturePrelude.lean"
+          s = p.read_text()
+          anchor = "set_option synthInstance.maxHeartbeats 200000"
+          assert s.count(anchor) == 1
+          header, tail = s.split(anchor)
+          imports = [line for line in header.splitlines() if line.startswith("import ")]
+          assert all(not line.strip() or line.startswith("import ") for line in header.splitlines())
+          assert not any("RiemannHypothesisOfEveryCharacter" in line for line in imports)
+          assert tail.rstrip().endswith("end")
+          body = tail.rstrip()[:-3].rstrip() + "\n"
+          assert body.startswith("\n\nsection\n")
+          body = body[len("\n\nsection\n"):]
+          starts = [m.start() for m in re.finditer(r"^theorem ", body, re.M)]
+          assert len(starts) == 194
+          assert not re.search(r"^(private |local |attribute |namespace |end\b)", body, re.M)
+          blocks = [body[:starts[0]]] + [body[starts[i]:starts[i+1] if i+1<len(starts) else len(body)] for i in range(len(starts))]
+          assert "".join(blocks) == body
+          imods = []
+          for i in range(0, len(imports), 5):
+              name = f"RFHLitSmallImports{i//5:02d}"
+              (d/(name+".lean")).write_text("\n".join(imports[i:i+5])+"\n")
+              imods.append(base+"."+name)
+          chunks = [blocks[:1]] + [blocks[i:i+25] for i in range(1,len(blocks),25)]
+          assert "".join("".join(c) for c in chunks) == body
+          mods = []
+          for i, chunk in enumerate(chunks):
+              name = f"RFHLitBlock{i:02d}"
+              deps = imods if i==0 else [mods[-1]]
+              code = "\n".join("import "+m for m in deps)+"\n\n"+anchor+"\n\nsection\n"+"".join(chunk)+"\nend\n"
+              (d/(name+".lean")).write_text(code)
+              mods.append(base+"."+name)
+              print("LIT_BLOCK",name,len(code.splitlines()),hashlib.sha256(code.encode()).hexdigest())
+          p.write_text("import "+mods[-1]+"\n")
+          Path("rfh_topg_stages.json").write_text(json.dumps(imods+mods+[base+".RFHLiteraturePrelude"]))
+          print("LIT_SPLIT",len(imods),len(mods),"theorems",len(starts))
+          PY
+      - name: Apply exact V23 observed compatibility repairs
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Formalism/GL3MeanSquares/HookFormulaTorsion/TeichmullerUnitAllPrimes.lean","PowerSeries.derivative K f","PowerSeries.derivative f",3],["Development/AbelianVarietyTheory/Definitions/Foundations/SmoothPartStable.lean","    rintro g f ⟨C, hC, hf⟩","    intro g f hf\n    change ∃ C : Set G, IsCompact C ∧ ∀ x, f.1.1 x ≠ 0 → ∃ h ∈ H, ∃ c ∈ C, x = h * c at hf\n    rcases hf with ⟨C, hC, hf⟩",1],["Development/AbelianVarietyTheory/PublishedTheorems/TwistedTraceFormula/SchurOrthogonalitySquareIntegrable.lean","rw [← Measure.inv_def μ, hc, Measure.map_smul, ← Measure.inv_def μ, hc, smul_smul, pow_two]","rw [← Measure.inv_def μ, hc, Measure.map_smul, ← Measure.inv_def μ, hc, smul_smul, pow_two] <;> first | exact continuous_inv.measurable | fun_prop",1],["Formalism/SharpRestriction/Divisibility/KudlaSiegelWeil.lean","(by rw [Ideal.comap_bot_of_injective _ (algFE_inj D)]; exact bot_le)","(by change Ideal.comap (algebraMap (𝓞 (FF D)) (𝓞 D.host.E)) ⊥ ≤ v.asIdeal\n         rw [Ideal.comap_bot_of_injective _ (algFE_inj D)]; exact bot_le)",1],["Formalism/SharpRestriction/Divisibility/KudlaSiegelWeil.lean","intro h; rw [h, Ideal.comap_bot_of_injective _ (algFE_inj D)] at hQ; exact v.ne_bot hQ.symm","intro h\n    change Ideal.comap (algebraMap (𝓞 (FF D)) (𝓞 D.host.E)) Q = v.asIdeal at hQ\n    rw [h, Ideal.comap_bot_of_injective _ (algFE_inj D)] at hQ\n    exact v.ne_bot hQ.symm",1],["Formalism/LocalToGlobal/IndefiniteReal/OrthogonalComplementCharacterisation.lean","IsAdjOf (ip m) (ip 0) (thetaDn CC io m) up","∀ x y, ip 0 (thetaDn CC io m x) y = ip m x (up y)",1],["Formalism/LocalToGlobal/IndefiniteReal/OrthogonalComplementCharacterisation.lean","IsIoUp νG 𝓕G th pt Tp CCs CCt up → IsAdjOf ipS ipT io up","IsIoUp νG 𝓕G th pt Tp CCs CCt up → ∀ x y, ipT (io x) y = ipS x (up y)",1],["Formalism/SharpRestriction/Divisibility/PrimeDegreeVariant.lean","exact Finsupp.mapDomain_apply hinj _ _","first\n    | exact Finsupp.mapDomain_apply_of_injective hinj _ _\n    | exact Finsupp.mapDomain_apply (fun h => Pi.mulSingle (M := G) i h) hinj _ _\n    | exact Finsupp.mapDomain_apply (fun h => Pi.mulSingle (M := G) i h) _ hinj _\n    | exact Finsupp.mapDomain_apply hinj _ _",1],["Formalism/SharpRestriction/Divisibility/PrimeDegreeVariant.lean","exact Finset.prod_le_prod hpos","exact Finset.prod_le_prod₀ hpos",1],["Formalism/SharpRestriction/Divisibility/PrimeDegreeVariant.lean","exact Finset.prod_le_prod (fun _ _ => by linarith)","exact Finset.prod_le_prod₀ (fun _ _ => by linarith)",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/ExistsEnvelopingAlgHomUnitaryLieAlgebra.lean","      | zero => simp\n      | add v₁ v₂ h₁ h₂ => rw [lie_add, map_add, h₁, h₂, map_add, lie_add]","      | zero => first | with_reducible_and_instances simp | simp [Ring.lie_def]\n      | add v₁ v₂ h₁ h₂ =>\n        first\n        | with_reducible_and_instances rw [lie_add, map_add, h₁, h₂, map_add, lie_add]\n        | rw [show ⁅a ⊗ₜ[ℝ] x, v₁ + v₂⁆ = ⁅a ⊗ₜ[ℝ] x, v₁⁆ + ⁅a ⊗ₜ[ℝ] x, v₂⁆ from by with_reducible_and_instances exact lie_add _ _ _, map_add, h₁, h₂, map_add, lie_add]",1],["Formalism/LocalToGlobal/ProjectiveLattices/NormLaws.lean","  have hz' : jFn V σ (rdC U σ a n) dict mu f","  letI : Module c.F (cusp Xo c U a n) := (cusp Xo c U a n).module\n  have hz' : jFn V σ (rdC U σ a n) dict mu f",1],["Formalism/LocalToGlobal/ProjectiveLattices/NormLaws.lean","theorem l2Def_of_cusp","set_option synthInstance.maxHeartbeats 200000 in\nset_option maxHeartbeats 1500000 in\ntheorem l2Def_of_cusp",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/UnitaryAdelicHeightCosetLeNormInfPow.lean","exact Finset.prod_le_prod (fun _ _ => NNReal.coe_nonneg _)","exact Finset.prod_le_prod₀ (fun _ _ => NNReal.coe_nonneg _)",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V24_PATCH", file, count)
+          PY
+      - name: Repair explicit smooth representation carrier after V24
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Development/AbelianVarietyTheory/Definitions/Foundations/SmoothPartStable.lean","  sub (smInd H σ) (cIndSpace H σ) (by","  sub (V := ↥(smoothPart (ind H σ))) (smInd H σ) (cIndSpace H σ) (by",1],["Development/AbelianVarietyTheory/Definitions/Foundations/SmoothPartStable.lean","    intro g f hf\n    change ∃ C : Set G, IsCompact C ∧ ∀ x, f.1.1 x ≠ 0 → ∃ h ∈ H, ∃ c ∈ C, x = h * c at hf","    intro g f hf\n    change ∃ C : Set G, IsCompact C ∧ ∀ x, (f : ↥(smoothPart (ind H σ))).1.1 x ≠ 0 → ∃ h ∈ H, ∃ c ∈ C, x = h * c at hf",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V26_PATCH", file, count)
+          PY
+      - name: Apply exact V23 TopG compatibility candidates
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Formalism/MoebiusJetDuality/StatementV.lean","coeff α (ajetPoly N f)","(ajetPoly N f).coeff α",1],["Formalism/HyperbolicPlaceProducts/SubgroupIndexCounts/SesquilinearDeterminantHolds.lean","Finset.prod_le_prod (fun k _ => Finset.sum_nonneg","Finset.prod_le_prod₀ (fun k _ => Finset.sum_nonneg",1],["Formalism/LocalToGlobal/ProjectiveLattices/XcLat.lean","namespace LawsCore\n\nopen Classical in","namespace LawsCore\n\nset_option synthInstance.maxHeartbeats 200000\nset_option maxHeartbeats 1500000\n\nlocal instance (priority := high) rfhCoreCModule (j : ℕ) (w : WeightFamilies.Wt D j) :\n    Module T.Q.c.F (T.C j w) := (T.C j w).module\n\nopen Classical in",1],["Formalism/LocalToGlobal/ProjectiveLattices/XcLat.lean","    T.C j w →ₗ[T.Q.c.F] T.FJt j cu χ w :=\n  FJ.sgF","    T.C j w →ₗ[T.Q.c.F] T.FJt j cu χ w := by\n  letI : Module T.Q.c.F (cusp (T.Q.Xo j) T.Q.c (T.U j) (wtA w) w.n) :=\n    (cusp (T.Q.Xo j) T.Q.c (T.U j) (wtA w) w.n).module\n  exact FJ.sgF",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","Finset.prod_le_prod (fun _ _ => Real.sqrt_nonneg _)","Finset.prod_le_prod₀ (fun _ _ => Real.sqrt_nonneg _)",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","Finset.prod_le_prod (fun _ _ => norm_nonneg _) fun i _ => ha1 i","Finset.prod_le_prod₀ (fun _ _ => norm_nonneg _) fun i _ => ha1 i",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","Finset.prod_le_prod (fun k _ => Finset.sum_nonneg fun γ _ => ?_)","Finset.prod_le_prod₀ (fun k _ => Finset.sum_nonneg fun γ _ => ?_)",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","theorem trans_of_stages","set_option maxHeartbeats 2000000 in\ntheorem trans_of_stages",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/RamificationRankSum/Points.lean","Ideal.isMaximal_comap_of_isIntegral_of_isMaximal ζ.asIdeal","Ideal.isMaximal_under_of_isIntegral_of_isMaximal (R := O) ζ.asIdeal",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/RamificationRankSum/Points.lean","  exact Ideal.isMaximal_of_isIntegral_of_isMaximal_comap q (h ▸ IsLocalRing.maximalIdeal.isMaximal O)","  have hu : q.under O = maximalIdeal O := h\n  exact Ideal.isMaximal_of_isIntegral_of_isMaximal_under (R := O) q (hu ▸ IsLocalRing.maximalIdeal.isMaximal O)",1],["Formalism/PeriodIntegrals/UnitaryGroupMassFormula/RamificationRankSum/Lattice.lean","isRegular_of_ne_zero (nonZeroDivisors.ne_zero s.2)","(by first | exact isRegular_iff_ne_zero.mpr (nonZeroDivisors.ne_zero s.2) | exact (nonZeroDivisors_iff_isRegular.mp s.2))",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LocalFormOfWeakForm.lean","theorem triv_err","set_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem triv_err",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LocalFormOfWeakForm.lean","theorem exists_ok_err","set_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem exists_ok_err",1],["Formalism/LocalToGlobal/Divisibility/CoefMod.lean","rw [coeff_add, star_add]","rw [MvPolynomial.coeff_add, star_add]",1],["Formalism/LocalToGlobal/Divisibility/CoefMod.lean","simp only [fockS, coeff_add,","simp only [fockS, MvPolynomial.coeff_add,",1],["Formalism/LocalToGlobal/Columns/DecoFin.lean","Finset.prod_le_prod (fun σ _ => norm_nonneg _)","Finset.prod_le_prod₀ (fun σ _ => norm_nonneg _)",1],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DescendedNorm.lean","Matrix.toEuclideanLin_apply","Matrix.toEuclideanLin",3],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DescendedNorm.lean","Finset.prod_le_prod (fun j _ => opNormAt_nonneg","Finset.prod_le_prod₀ (fun j _ => opNormAt_nonneg",1],["Formalism/QuotientMetricDivisors/HermitianTwistDivisors/DescendedNorm.lean","Finset.prod_le_prod (fun j _ => (hlamL","Finset.prod_le_prod₀ (fun j _ => (hlamL",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","namespace Formalism.BranchingDeterminantCap\n","namespace Formalism.BranchingDeterminantCap\n\nprivate abbrev rfhCoeff {σ R : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p : MvPolynomial σ R) : R := p.coeff m\nprivate theorem rfhCoeff_zero {σ R : Type*} [CommSemiring R] (m : σ →₀ ℕ) :\n    rfhCoeff m (0 : MvPolynomial σ R) = 0 := by simp [rfhCoeff]\nlocal notation \"coeff\" => rfhCoeff\nlocal notation \"coeff_zero\" => rfhCoeff_zero\n",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V25_PATCH", file, count)
+          PY
+      - name: Consolidate certified V27 patches and retry base
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","private abbrev rfhCoeff {σ R : Type*} [CommSemiring R] (m : σ →₀ ℕ) (p : MvPolynomial σ R) : R := p.coeff m\nprivate theorem rfhCoeff_zero {σ R : Type*} [CommSemiring R] (m : σ →₀ ℕ) :\n    rfhCoeff m (0 : MvPolynomial σ R) = 0 := by simp [rfhCoeff]\nlocal notation \"coeff\" => rfhCoeff\nlocal notation \"coeff_zero\" => rfhCoeff_zero","private theorem rfhCoeff_zero {σ R : Type*} [CommSemiring R] (m : σ →₀ ℕ) :\n    (0 : MvPolynomial σ R).coeff m = 0 := by simp\nlocal notation \"coeff_zero\" => rfhCoeff_zero",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","coeff m (bmZ R n s s F)","(bmZ R n s s F).coeff m",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","coeff m F","F.coeff m",2],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","congrArg (coeff (m - Finsupp.single none 1)) h","congrArg (fun p => p.coeff (m - Finsupp.single none 1)) h",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","congrArg (coeff m)","congrArg (fun p => p.coeff m)",2],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","congrArg (coeff d)","congrArg (fun p => p.coeff d)",2],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","coeff m (zcomp R n β G)","(zcomp R n β G).coeff m",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","coeff m G","G.coeff m",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","(coeff d F)","(F.coeff d)",1],["Formalism/BranchSandwichDivisors/BranchIsometryProofs/BranchMap.lean","(coeff d L)","(L.coeff d)",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","set_option maxHeartbeats 2000000 in\ntheorem trans_of_stages","set_option maxHeartbeats 8000000 in\nset_option synthInstance.maxHeartbeats 400000 in\ntheorem trans_of_stages",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LocalFormOfWeakForm.lean","set_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem triv_err","local instance (priority := high) rfhMWModule (X : PJ D B P j) (ka : WeightFamilies.Wt D j)\n    (la : HeightOneSpectrum (𝓞 B.KO)) : Module (X.Ol la) (MW X ka la) := (MW X ka la).module\n\nset_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem triv_err",1],["Formalism/SharpRestriction/Divisibility/KudlaSiegelWeil.lean","(by change Ideal.comap (algebraMap (𝓞 (FF D)) (𝓞 D.host.E)) ⊥ ≤ v.asIdeal\n         rw [Ideal.comap_bot_of_injective _ (algFE_inj D)]; exact bot_le)","(by\n      change Ideal.comap (algebraMap (𝓞 (FF D)) (𝓞 D.host.E)) ⊥ ≤ v.asIdeal\n      rw [Ideal.comap_bot_of_injective _ (algFE_inj D)]\n      exact bot_le)",1],["Formalism/GL3MeanSquares/HookFormulaTorsion/TeichmullerUnitAllPrimes.lean","PowerSeries.derivative K U","PowerSeries.derivative U",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/AnisotropicFiniteLengthsOfShortLatticeVector.lean","exact Finset.prod_le_prod (fun _ _ => norm_nonneg _) fun φ _ => norm_le_house φ _","exact Finset.prod_le_prod₀ (fun _ _ => norm_nonneg _) fun φ _ => norm_le_house φ _",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/AnisotropicFiniteLengthsOfShortLatticeVector.lean","Finset.prod_le_prod (fun _ _ => norm_nonneg _) fun ψ _ => (norm_le_house ψ _).trans h","Finset.prod_le_prod₀ (fun _ _ => norm_nonneg _) fun ψ _ => (norm_le_house ψ _).trans h",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/ShortLatticeVectorBoundedSizeOfOrthogonalFrame.lean","Finset.prod_le_prod (g := fun _ => T)","Finset.prod_le_prod₀ (g := fun _ => T)",1],["Development/AbelianVarietyTheory/Proofs/AdelicLatticeProofs/IndexUnitsLocalSquaresFiniteRealPlacesLe.lean","Finset.prod_le_prod (fun _ _ => Nat.zero_le _)","Finset.prod_le_prod₀ (fun _ _ => Nat.zero_le _)",2],["ReciprocityTheory/ReducedBases/PrefixProdGeOne.lean","Finset.prod_le_prod (fun j _ => by positivity) (fun j _ => hterm j)","Finset.prod_le_prod₀ (fun j _ => by positivity) (fun j _ => hterm j)",1],["ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/ArakelovVolumes/IntegralModuleBases/NormGsoSqLeTwoPowMulOfValEqAdd.lean","Finset.prod_le_prod (s := univ.erase i)","Finset.prod_le_prod₀ (s := univ.erase i)",1],["ReciprocityTheory/ReducedBases/ExistsRedOf.lean","Finset.prod_le_prod (fun _ _ => hc0.le) (fun k _ => hc e k)","Finset.prod_le_prod₀ (fun _ _ => hc0.le) (fun k _ => hc e k)",1],["Lemmata/DetMonotoneStarMulSelf/OneLeReDetOneAdd.lean","Finset.prod_le_prod (fun _ _ => zero_le_one) (fun i _ => key i)","Finset.prod_le_prod₀ (fun _ _ => zero_le_one) (fun i _ => key i)",1],["Development/AbelianVarietyTheory/Proofs/TorusHaarMeasure/FirstMinimumLowerOfLineHeights.lean","Finset.prod_le_one (fun i _ => hf i)","Finset.prod_le_one₀ (fun i _ => hf i)",1],["ReciprocityTheory/GeometryOfNumbers/LatticeCovolumes/GramSt.lean","Finset.prod_le_prod (fun _ _ => zero_le_one)\n          (fun i _ => by linarith [hQ.eigenvalues_nonneg i])","Finset.prod_le_prod₀ (fun _ _ => zero_le_one)\n          (fun i _ => by linarith [hQ.eigenvalues_nonneg i])",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V27_CONSOLIDATED", file, count)
+          PY
+      - name: V28 exact targeted candidates
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/FundamentalDomains/M3bNormHolds.lean","· exact Finset.prod_le_prod (fun τ _ => (ratio_tau","· exact Finset.prod_le_prod₀ (fun τ _ => (ratio_tau",1],["ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/FundamentalDomains/M3bNormHolds.lean","· exact Finset.prod_le_prod\n      (fun τ _ => (ratio_tau","· exact Finset.prod_le_prod₀\n      (fun τ _ => (ratio_tau",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LocalFormOfWeakForm.lean","set_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem triv_err","local instance (priority := high) rfhMWQuotient (X : PJ D B P j) (ka : WeightFamilies.Wt D j)\n    (la : HeightOneSpectrum (𝓞 B.KO)) : HasQuotient (↥(MW X ka la)) (Submodule (X.Ol la) (MW X ka la)) :=\n  @Submodule.hasQuotient (X.Ol la) (MW X ka la) (inferInstance : Ring (X.Ol la))\n    (MW X ka la).addCommGroup (MW X ka la).module\n\nset_option synthInstance.maxHeartbeats 200000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem triv_err",1],["Formalism/LocalToGlobal/ProjectiveLattices/NormLaws.lean","  have hz' : jFn V σ (rdC U σ a n) dict mu f =ᵐ[muQ1 V] 0 :=\n    (MemLp.coeFn_toLp (h a n hdom f)).symm.trans (Lp.eq_zero_iff_ae_eq_zero.1 hz)","  let g : _ → ℂ := onQ V (adel V dict mu (rdU (U σ) (f : Rul Xo c)))\n  have hg : MemLp g 2 (muQ1 V) := h a n hdom f\n  have hzG : hg.toLp g = 0 := hz\n  have hz' : onQ V (adel V dict mu (rdU (U σ) (f : Rul Xo c))) =ᵐ[muQ1 V] 0 :=\n    (MemLp.coeFn_toLp hg).symm.trans (Lp.eq_zero_iff_ae_eq_zero.1 hzG)",1],["Formalism/LocalToGlobal/ProjectiveLattices/NormLaws.lean","set_option synthInstance.maxHeartbeats 200000 in\nset_option maxHeartbeats 1500000 in\ntheorem l2Def_of_cusp","set_option synthInstance.maxHeartbeats 200000 in\nset_option maxHeartbeats 1500000 in\nset_option backward.isDefEq.respectTransparency false in\ntheorem l2Def_of_cusp",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/ExistsEnvelopingAlgHomUnitaryLieAlgebra.lean","      | zero => first | with_reducible_and_instances simp | simp [Ring.lie_def]\n      | add v₁ v₂ h₁ h₂ =>\n        first\n        | with_reducible_and_instances rw [lie_add, map_add, h₁, h₂, map_add, lie_add]\n        | rw [show ⁅a ⊗ₜ[ℝ] x, v₁ + v₂⁆ = ⁅a ⊗ₜ[ℝ] x, v₁⁆ + ⁅a ⊗ₜ[ℝ] x, v₂⁆ from by with_reducible_and_instances exact lie_add _ _ _, map_add, h₁, h₂, map_add, lie_add]","      | zero =>\n        have hz : ⁅a ⊗ₜ[ℝ] x, (0 : ℂ ⊗[ℝ] L)⁆ = 0 := by\n          rw [← TensorProduct.tmul_zero a, LieAlgebra.ExtendScalars.bracket_tmul, lie_zero, TensorProduct.tmul_zero]\n        simp [hz]\n      | add v₁ v₂ h₁ h₂ =>\n        have ha : ⁅a ⊗ₜ[ℝ] x, v₁ + v₂⁆ = ⁅a ⊗ₜ[ℝ] x, v₁⁆ + ⁅a ⊗ₜ[ℝ] x, v₂⁆ :=\n          (LieAlgebra.ExtendScalars.instLieRingModule ℝ ℂ L L).lie_add (a ⊗ₜ[ℝ] x) v₁ v₂\n        rw [ha, map_add, h₁, h₂, map_add, lie_add]",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","  have hrat : ∀ j (f : V), ∃ q : ℚ, (q : ℝ) = inner ℝ (tr_iota Hm f) (y j : TrW K dH) := by\n    intro j f\n    obtain ⟨m, hm0, hmM⟩ := h3 K V M hM f\n    obtain ⟨z, hz⟩ := hint j _ hmM\n    rw [tr_iota_smul_int, real_inner_smul_left] at hz\n    have hm0' : (m : ℝ) ≠ 0 := by exact_mod_cast hm0\n    refine ⟨(z : ℚ) / m, ?_⟩\n    push_cast\n    rw [← hz]\n    field_simp\n  choose lf hlf using hrat\n  let ℓ : Fin (finrank ℝ E) → V →+ ℚ := fun j =>\n    { toFun := lf j\n      map_zero' := by\n        have : ((lf j 0 : ℚ) : ℝ) = ((0 : ℚ) : ℝ) := by rw [hlf, map_zero, inner_zero_left]; simp\n        exact_mod_cast this\n      map_add' := fun f g => by\n        have : ((lf j (f + g) : ℚ) : ℝ) = ((lf j f + lf j g : ℚ) : ℝ) := by\n          push_cast\n          rw [hlf, hlf, hlf, map_add, inner_add_left]\n        exact_mod_cast this }\n  choose cf hcf using fun j => h2 K V (ℓ j)\n  have hcf' : ∀ j g, ((Algebra.trace ℚ K (cf j g) : ℚ) : ℝ) = inner ℝ (tr_iota Hm g) (y j : TrW K dH) := by\n    intro j g\n    rw [hcf j g]\n    exact hlf j g\n","  obtain ⟨cf, hcf'⟩ := rfh_trace_family h2 h3 M hM Hm E y hint\n",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","    have hco : (Submodule.span K (Set.range cf)).dualCoannihilator = ⊥ := by\n      rw [eq_bot_iff]\n      intro f hf\n      rw [Submodule.mem_dualCoannihilator] at hf\n      have hz : ∀ j, inner ℝ (tr_iota Hm f) (y j : TrW K dH) = 0 := by\n        intro j\n        rw [← hcf' j f, hf (cf j) (Submodule.subset_span ⟨j, rfl⟩)]\n        simp\n      have htop : Submodule.span ℝ (Set.range y) = ⊤ :=\n        hyli.span_eq_top_of_card_eq_finrank' (by simp)\n      have hzero : (⟨tr_iota Hm f, hiotaE f⟩ : E) = 0 := by\n        have hall : ∀ x : E, inner ℝ (⟨tr_iota Hm f, hiotaE f⟩ : E) x = 0 := by\n          intro x\n          have hx : x ∈ Submodule.span ℝ (Set.range y) := htop ▸ Submodule.mem_top\n          induction hx using Submodule.span_induction with\n          | mem x hx => obtain ⟨j, rfl⟩ := hx; exact hz j\n          | zero => exact inner_zero_right _\n          | add a b _ _ ha hb => rw [inner_add_right, ha, hb, add_zero]\n          | smul r a _ ha => rw [inner_smul_right, ha, mul_zero]\n        exact inner_self_eq_zero.1 (hall _)\n      have hi0 : tr_iota Hm f = 0 := congrArg Subtype.val hzero\n      by_contra hf0\n      have hf0' : f ≠ 0 := hf0\n      obtain ⟨m, hm0, hmM⟩ := h3 K V M hM f\n      have hmK : (m : K) ≠ 0 := by exact_mod_cast hm0\n      have hne : (m : K) • f ≠ 0 := smul_ne_zero hmK hf0'\n      have h := hlow _ hmM hne\n      rw [← tr_norm_iota_sq Hm, tr_iota_smul_int, hi0, smul_zero, norm_zero] at h\n      nlinarith [pow_pos hΛ 2]\n    have h := Subspace.dualCoannihilator_dualAnnihilator_eq (W := Submodule.span K (Set.range cf))\n    rw [hco, Submodule.dualAnnihilator_bot] at h\n    exact h.symm\n","    exact rfh_span_cf h3 M hM Hm E y cf hyli hcf' hiotaE Λ hΛ hlow\n",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","set_option maxHeartbeats 8000000 in\nset_option synthInstance.maxHeartbeats 400000 in\ntheorem trans_of_stages","set_option maxHeartbeats 4000000 in\nset_option synthInstance.maxHeartbeats 200000 in\nprivate theorem rfh_trace_family (h2 : TrTraceDual) (h3 : TrScale)\n    (M : Submodule (𝓞 K) V) (hM : Submodule.span K (M : Set V) = ⊤)\n    (Hm : Herm N2 dH) (E : Submodule ℝ (TrW K dH)) (y : Fin (finrank ℝ E) → E)\n    (hint : ∀ j, ∀ f ∈ M, ∃ z : ℤ, inner ℝ (tr_iota Hm f) (y j : TrW K dH) = (z : ℝ)) :\n    ∃ cf : Fin (finrank ℝ E) → V →ₗ[K] K,\n      ∀ j g, ((Algebra.trace ℚ K (cf j g) : ℚ) : ℝ) = inner ℝ (tr_iota Hm g) (y j : TrW K dH) := by\n  classical\n  have hrat : ∀ j (f : V), ∃ q : ℚ, (q : ℝ) = inner ℝ (tr_iota Hm f) (y j : TrW K dH) := by\n    intro j f\n    obtain ⟨m, hm0, hmM⟩ := h3 K V M hM f\n    obtain ⟨z, hz⟩ := hint j _ hmM\n    rw [tr_iota_smul_int, real_inner_smul_left] at hz\n    have hm0' : (m : ℝ) ≠ 0 := by exact_mod_cast hm0\n    refine ⟨(z : ℚ) / m, ?_⟩\n    push_cast\n    rw [← hz]\n    field_simp\n  choose lf hlf using hrat\n  let ℓ : Fin (finrank ℝ E) → V →+ ℚ := fun j =>\n    { toFun := lf j\n      map_zero' := by\n        have : ((lf j 0 : ℚ) : ℝ) = ((0 : ℚ) : ℝ) := by rw [hlf, map_zero, inner_zero_left]; simp\n        exact_mod_cast this\n      map_add' := fun f g => by\n        have : ((lf j (f + g) : ℚ) : ℝ) = ((lf j f + lf j g : ℚ) : ℝ) := by\n          push_cast\n          rw [hlf, hlf, hlf, map_add, inner_add_left]\n        exact_mod_cast this }\n  choose cf hcf using fun j => h2 K V (ℓ j)\n  have hcf' : ∀ j g, ((Algebra.trace ℚ K (cf j g) : ℚ) : ℝ) = inner ℝ (tr_iota Hm g) (y j : TrW K dH) := by\n    intro j g\n    rw [hcf j g]\n    exact hlf j g\n  exact ⟨cf, hcf'⟩\n\nset_option maxHeartbeats 4000000 in\nset_option synthInstance.maxHeartbeats 200000 in\nprivate theorem rfh_span_cf (h3 : TrScale) [FiniteDimensional K V]\n    (M : Submodule (𝓞 K) V) (hM : Submodule.span K (M : Set V) = ⊤)\n    (Hm : Herm N2 dH) (E : Submodule ℝ (TrW K dH)) (y : Fin (finrank ℝ E) → E)\n    (cf : Fin (finrank ℝ E) → V →ₗ[K] K) (hyli : LinearIndependent ℝ y)\n    (hcf' : ∀ j g, ((Algebra.trace ℚ K (cf j g) : ℚ) : ℝ) = inner ℝ (tr_iota Hm g) (y j : TrW K dH))\n    (hiotaE : ∀ f : V, tr_iota Hm f ∈ E)\n    (Λ : ℝ) (hΛ : 0 < Λ)\n    (hlow : ∀ f ∈ M, f ≠ 0 → Λ ^ 2 ≤ ∑ σ : K →+* ℂ, N2 σ f ^ 2) :\n    Submodule.span K (Set.range cf) = ⊤ := by\n  classical\n  have hco : (Submodule.span K (Set.range cf)).dualCoannihilator = ⊥ := by\n    rw [eq_bot_iff]\n    intro f hf\n    rw [Submodule.mem_dualCoannihilator] at hf\n    have hz : ∀ j, inner ℝ (tr_iota Hm f) (y j : TrW K dH) = 0 := by\n      intro j\n      rw [← hcf' j f, hf (cf j) (Submodule.subset_span ⟨j, rfl⟩)]\n      simp\n    have htop : Submodule.span ℝ (Set.range y) = ⊤ :=\n      hyli.span_eq_top_of_card_eq_finrank' (by simp)\n    have hzero : (⟨tr_iota Hm f, hiotaE f⟩ : E) = 0 := by\n      have hall : ∀ x : E, inner ℝ (⟨tr_iota Hm f, hiotaE f⟩ : E) x = 0 := by\n        intro x\n        have hx : x ∈ Submodule.span ℝ (Set.range y) := htop ▸ Submodule.mem_top\n        induction hx using Submodule.span_induction with\n        | mem x hx => obtain ⟨j, rfl⟩ := hx; exact hz j\n        | zero => exact inner_zero_right _\n        | add a b _ _ ha hb => rw [inner_add_right, ha, hb, add_zero]\n        | smul r a _ ha => rw [inner_smul_right, ha, mul_zero]\n      exact inner_self_eq_zero.1 (hall _)\n    have hi0 : tr_iota Hm f = 0 := congrArg Subtype.val hzero\n    by_contra hf0\n    have hf0' : f ≠ 0 := hf0\n    obtain ⟨m, hm0, hmM⟩ := h3 K V M hM f\n    have hmK : (m : K) ≠ 0 := by exact_mod_cast hm0\n    have hne : (m : K) • f ≠ 0 := smul_ne_zero hmK hf0'\n    have h := hlow _ hmM hne\n    rw [← tr_norm_iota_sq Hm, tr_iota_smul_int, hi0, smul_zero, norm_zero] at h\n    nlinarith [pow_pos hΛ 2]\n  have h := Subspace.dualCoannihilator_dualAnnihilator_eq (W := Submodule.span K (Set.range cf))\n  rw [hco, Submodule.dualAnnihilator_bot] at h\n  exact h.symm\n\nset_option maxHeartbeats 8000000 in\nset_option synthInstance.maxHeartbeats 400000 in\ntheorem trans_of_stages",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V28_PATCH", file, count)
+          PY
+      - name: Consolidate seven certified V29 roots and Haar retry base
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Formalism/SharpRestriction/GlobalSchurBounds/ProductFirstZerothParts.lean","Finsupp.mapDomain_apply (Prod.mk_right_injective τ) _ a","Finsupp.mapDomain_apply_of_injective (Prod.mk_right_injective τ) _ a",1],["Development/AbelianVarietyTheory/BlockTheory/HeightDefect/WeilIdempotents.lean","  simp [herm, colMat, Matrix.transpose_smul, Matrix.mul_smul, Matrix.trace_smul]","  simp only [herm, colMat, Matrix.transpose_smul]\n  first\n  | rw [Matrix.mul_smul, Matrix.trace_smul, smul_eq_mul]\n  | simp only [Matrix.trace, Matrix.diag, Matrix.mul_apply, Matrix.smul_apply, smul_eq_mul, Finset.mul_sum]\n    apply Finset.sum_congr rfl\n    intro i _\n    apply Finset.sum_congr rfl\n    intro j _\n    ring",1],["Development/AbelianVarietyTheory/Counterexamples/HeightSurvey/StarPurelyImaginaryEqNeg.lean","  rw [← trace_cA, map_mul, cA_incA, star_purely_imaginary_eq_neg, hHom_herm, map_neg, neg_mul, map_neg]","  rw [← trace_cA, map_mul, cA_incA, star_purely_imaginary_eq_neg, hHom_herm, map_neg]\n  first\n  | rw [neg_mul, map_neg]\n  | simpa only [map_neg] using congrArg (Algebra.trace (AF D.host.F) (AE D)) (neg_mul (incA D D.host.xi0) (hHom V W y x))",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/HaarUpqEqOfOmegaDensity.lean","  rw [hp, Measure.map_smul, h2'] at h2","  rw [hp, Measure.map_smul, h2'] at h2 <;> fun_prop",1],["Development/AbelianVarietyTheory/BlockTheory/HeightDefect/UnitaryVolumePairs.lean","def normId : IdE D →* IdE D := MonoidHom.id (IdE D) * conjId D","def normId : IdE D →* IdE D := by\n  letI : CommRing (AE D) := inferInstanceAs (CommRing (AF D.host.F ⊗[D.host.F] D.host.E))\n  letI : CommGroup (IdE D) := inferInstanceAs (CommGroup (AE D)ˣ)\n  exact MonoidHom.id (IdE D) * conjId D",1],["Development/AbelianVarietyTheory/Proofs/AdelicLatticeProofs/ExistsIsUnitFormSelfOfNotMem.lean","  have h := eq_maximalIdeal (Ideal.isMaximal_comap_of_isIntegral_of_isMaximal (R := R) n)\n  rw [← h] at hr\n  exact hr","  have h := eq_maximalIdeal (Ideal.isMaximal_under_of_isIntegral_of_isMaximal (R := R) n)\n  rw [← h] at hr\n  change (algebraMap R S) r ∈ n at hr\n  exact hr",1],["Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/ExistsAbsoluteValueOfIsDiscreteValuationRing.lean","((IsLocalRing.local_hom_TFAE g).out 0 2).2","((IsLocalRing.local_hom_TFAE g).out 1 3).2",1],["Development/AbelianVarietyTheory/Proofs/HomogeneousIdeals/ExistsAbsoluteValueOfIsDiscreteValuationRing.lean","((IsLocalRing.local_hom_TFAE f).out 0 2).1","((IsLocalRing.local_hom_TFAE f).out 1 3).1",1],["ReciprocityTheory/ReductiveGroups/ArithmeticGeometry/FundamentalDomains/UnipotentCoefficientShift.lean","Finset.prod_lt_prod_of_nonempty (fun σ _ => norm_pos_iff.mpr ((map_ne_zero σ).mpr ha0))","Finset.prod_lt_prod_of_nonempty₀ (fun σ _ => norm_pos_iff.mpr ((map_ne_zero σ).mpr ha0))",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V29_CONSOLIDATED", file, count)
+          PY
+      - name: V30 exact targeted residual candidates
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          edits = json.loads(r'''[["Development/AbelianVarietyTheory/Proofs/HeightProofs/ExistsEnvelopingAlgHomUnitaryLieAlgebra.lean","          rw [← TensorProduct.tmul_zero a, LieAlgebra.ExtendScalars.bracket_tmul, lie_zero, TensorProduct.tmul_zero]","          have hzt : a ⊗ₜ[ℝ] (0 : L) = 0 := by simp\n          calc\n            _ = ⁅a ⊗ₜ[ℝ] x, a ⊗ₜ[ℝ] (0 : L)⁆ := congrArg (fun z : ℂ ⊗[ℝ] L => ⁅a ⊗ₜ[ℝ] x, z⁆) hzt.symm\n            _ = 0 := by rw [LieAlgebra.ExtendScalars.bracket_tmul, lie_zero]; simp",1],["Development/AbelianVarietyTheory/Proofs/HeightProofs/HaarUpqEqOfOmegaDensity.lean","  rw [hp, Measure.map_smul, h2'] at h2 <;> fun_prop","  have hmeas : Measurable (fun ab : lieU P Q × lieU P Q => entries ((ab.1 : Matrix (Fin P ⊕ Fin Q) (Fin P ⊕ Fin Q) ℂ) + Complex.I • (ab.2 : Matrix (Fin P ⊕ Fin Q) (Fin P ⊕ Fin Q) ℂ))) := by\n    unfold entries\n    fun_prop\n  rw [hp, Measure.map_smul _ hmeas.aemeasurable, h2'] at h2",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","set_option maxHeartbeats 4000000 in\nset_option synthInstance.maxHeartbeats 200000 in\nprivate theorem rfh_trace_family","local instance (priority := high) rfhTrWRealInner : InnerProductSpace ℝ (TrW K dH) :=\n  InnerProductSpace.rclikeToReal ℂ (TrW K dH)\n\nlocal instance (priority := high) rfhTrSubRealInner (E : Submodule ℝ (TrW K dH)) : InnerProductSpace ℝ E :=\n  E.innerProductSpace\n\nset_option maxHeartbeats 4000000 in\nset_option synthInstance.maxHeartbeats 200000 in\nprivate theorem rfh_trace_family",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","    rw [tr_iota_smul_int, real_inner_smul_left] at hz","    rw [tr_iota_smul_int] at hz\n    change inner ℝ ((m : ℝ) • tr_iota Hm f) (y j : TrW K dH) = (z : ℝ) at hz\n    rw [real_inner_smul_left (tr_iota Hm f) (y j : TrW K dH) (m : ℝ)] at hz",1],["Formalism/SharpRestriction/GenusPolyhedralBounds/RelativeIndexClassSets/LogSupSumLeOfNonvanishingDetLimit.lean","| smul r a _ ha => rw [inner_smul_right, ha, mul_zero]","| smul r a _ ha => rw [real_inner_smul_right, ha, mul_zero]",1]]''')
+          for file, old, new, count in edits:
+              p = Path(file)
+              s = p.read_text()
+              assert s.count(old) == count, (file, old, s.count(old), count)
+              p.write_text(s.replace(old, new))
+              print("V30_PATCH", file, count)
+          PY
+      - name: Frontier chi
+        id: chi
+        timeout-minutes: 40
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --kill-after=15s 2100s lake build Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi 2>&1 | tee ../../bridge/assembly-logs/chi.log
+      - name: Frontier core without terminal theorem
+        timeout-minutes: 40
+        working-directory: upstream/lean
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --kill-after=15s 2100s lake build Development.AutomorphicArithmetic.PrimitiveCosets.CoreAtH 2>&1 | tee ../../bridge/assembly-logs/core.log
+      - name: Build normalized zeta balance targets
+        working-directory: upstream/lean
+        timeout-minutes: 120
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.MeanSquareBounds.pairEx Formalism.GL3MeanSquares.HookFormulaTorsion.WeightedVonMangoldtSumIdentity Formalism.GammaFactorNonvanishing.RhOfRight Development.AutomorphicArithmetic.ConductorsKronecker.CostPropositionBasicBound Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ChTop 2>&1 | tee ../../bridge/assembly-logs/normalized-imports.log
+      - name: Load certified bridge lemmas in one local module
+        working-directory: upstream/lean
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake env lean -o RHAssemblyV2.olean RHAssemblyV2.lean
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHMatchedBase.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.ConductorsKronecker.CostPropositionBasicBound
+          import Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ZeroFreeOfRpowWindow
+          import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.ExplicitFormulaErrorOfHostConditions
+          import Development.AutomorphicArithmetic.MeanSquareBounds.pairEx
+          import RHAssemblyV2
+          import Development.AutomorphicArithmetic.DedekindLFunctions.LandauTheorems.ChTop
+          import Lean.Util.FoldConsts
+          
+          noncomputable section
+          open UpperTheory.Top Formalism Formalism.D5 Formalism.HC Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Deduction.CH
+          open Finset Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain
+          namespace BorghettiRH
+          
+          theorem gz_eq_direct :
+              ∀ y : ℝ, Formalism.Gz y = An.G y ∧ An.G y = Deduction.G y := by
+            intro y
+            have hsum : ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, ArithmeticFunction.vonMangoldt n * (y / (n : ℝ) - 1)
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              apply Finset.sum_congr rfl
+              intro n hn
+              rw [Finset.mem_Icc] at hn
+              have hn1 : (1 : ℝ) ≤ n := by exact_mod_cast hn.1
+              have hy : (n : ℝ) ≤ y := by
+                have hk : 0 < ⌊y⌋₊ := lt_of_lt_of_le Nat.zero_lt_one (le_trans hn.1 hn.2)
+                have hy0 : 0 ≤ y := by
+                  by_contra hneg
+                  push_neg at hneg
+                  rw [Nat.floor_eq_zero.2 (lt_trans hneg zero_lt_one)] at hk
+                  exact lt_irrefl 0 hk
+                exact le_trans (by exact_mod_cast hn.2) (Nat.floor_le hy0)
+              have hpos : (0 : ℝ) < n := by linarith
+              have : 0 ≤ y / (n : ℝ) - 1 := by
+                rw [sub_nonneg, le_div_iff₀ hpos, one_mul]
+                exact hy
+              rw [max_eq_left this]
+            have hre : (Deduction.ramp (fun _ => 1) y).re
+                = ∑ n ∈ Finset.Icc 1 ⌊y⌋₊, An.abelian₂ n * max (y / (n : ℝ) - 1) 0 := by
+              have hsub : Finset.Icc 1 ⌊y⌋₊ ⊆ Finset.range (⌊y⌋₊ + 1) := by
+                intro n hn
+                rw [Finset.mem_Icc] at hn
+                rw [Finset.mem_range]
+                omega
+              rw [Finset.sum_subset hsub]
+              · simp [Deduction.ramp, Complex.re_sum]
+              · intro n hn hn'
+                have h0 : n = 0 := by
+                  rw [Finset.mem_range] at hn
+                  rw [Finset.mem_Icc] at hn'
+                  omega
+                subst h0
+                simp
+            refine ⟨?_, ?_⟩
+            · simp only [Formalism.Gz, Formalism.Sz, An.G]
+              rw [hsum]
+              ring
+            · simp only [An.G, Deduction.G]
+              rw [hre]
+              ring
+          
+          theorem normalize_balance (P δ x Err g a : ℝ)
+              (hP : 0 < P) (hd : 0 < δ) (hx : 0 < x)
+              (h : P * (δ / 2) * (g - a) ≤ Err + 2 * P / x) :
+              g ≤ Err / (P * (δ / 2)) + a + 4 / (δ * x) := by
+            have hB : 0 < P * (δ / 2) := by positivity
+            have h1 : g - a ≤ (Err + 2 * P / x) / (P * (δ / 2)) := by
+              apply (le_div_iff₀ hB).2
+              simpa only [mul_comm (g - a)] using h
+            have h2 : (Err + 2 * P / x) / (P * (δ / 2)) =
+                Err / (P * (δ / 2)) + 4 / (δ * x) := by
+              field_simp [ne_of_gt hP, ne_of_gt hd, ne_of_gt hx]
+              <;> ring
+            rw [h2] at h1
+            linarith
+          
+          theorem normalized_actual {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (S : Finset ℕ) (hD : HostFactsS D S)
+              (ell : AddChar (E0 × H) ℂ → ℂ) (N m : ℕ)
+              (TT T2 : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (x eps b b' η X' θ Cd CL : ℝ)
+              (hH : GrowthInequalityHypotheses D ell N TT T2 a w x eps b b' η X' θ Cd CL (topExcess D N ell TT a w))
+              (hS : SmallCosts x eps (fPl H) b η θ Cd CL)
+              (hP : 0 < (TT.card : ℝ) * m * b) (hd : 0 < delta2 T2) :
+              Deduction.G x ≤ topExcess D N ell TT a w / ((TT.card : ℝ) * m * b * (delta2 T2 / 2)) +
+                4 * x ^ ((1 : ℝ) / 2 + eps) + 4 / (delta2 T2 * x) := by
+            have h := UpperTheory.GL.card_mul_delta_le_err D S hD ell N m TT T2 a w x eps b b' η X' θ Cd CL
+              (topExcess D N ell TT a w) hH hS
+            have hx : 0 < x := by linarith [hH.1]
+            rw [(gz_eq_direct x).1, (gz_eq_direct x).2] at h
+            apply normalize_balance _ _ _ _ _ _ hP hd hx
+            simpa only [mul_assoc] using h
+          
+          theorem absorb_normalized (C eps : ℝ) (hC : 0 ≤ C) (he : 0 < eps) :
+              ∃ X : ℝ, ∀ x ≥ X, ∀ (g R : ℝ),
+                g ≤ R + 4 * x ^ ((1 : ℝ) / 2 + eps) →
+                R ≤ x ^ ((1 : ℝ) / 2 + C * eps) →
+                g ≤ x ^ ((1 : ℝ) / 2 + (C + 2) * eps) := by
+            obtain ⟨X,hX⟩ := Filter.eventually_atTop.1
+              ((tendsto_rpow_atTop he).eventually_ge_atTop (5 : ℝ))
+            refine ⟨max 1 X, ?_⟩
+            intro x hx g R hg hR
+            have hx1 : 1 ≤ x := (le_max_left _ _).trans hx
+            have hx0 : 0 < x := zero_lt_one.trans_le hx1
+            have h1 : x ^ ((1 : ℝ) / 2 + eps) ≤ x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+              Real.rpow_le_rpow_of_exponent_le hx1 (by nlinarith)
+            have h2 : x ^ ((1 : ℝ) / 2 + C*eps) ≤ x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+              Real.rpow_le_rpow_of_exponent_le hx1 (by nlinarith)
+            calc
+              g ≤ 5 * x ^ ((1 : ℝ) / 2 + (C+1)*eps) := by linarith
+              _ ≤ x ^ eps * x ^ ((1 : ℝ) / 2 + (C+1)*eps) :=
+                mul_le_mul_of_nonneg_right (hX x ((le_max_right _ _).trans hx)) (Real.rpow_nonneg hx0.le _)
+              _ = x ^ ((1 : ℝ) / 2 + (C+2)*eps) := by
+                rw [← Real.rpow_add hx0]
+                congr 1
+                ring
+          
+          theorem three_modes_of_pairGood {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (eps Y X x : ℝ) (q d : ℕ) (he : 0 < eps) (hx : 1 ≤ x)
+              (hY : Y ≤ x) (hX : x ≤ X) (hP : PairGood 1 eps Y X q d)
+              (hMatch : ∀ ψ : AddChar (E0 × H) ℂ, (ψ = psC ∨ ψ = chC ∨ ψ = chpsC) →
+                ∃ (ξ : DirichletCharacter ℂ 1) (i j : Fin 2), (i ≠ 0 ∨ j ≠ 0) ∧
+                  ∃ (p : PChar),
+                    An.Induces p.χ (tw (fun a => ξ (a : ZMod 1)) q d i j) (2 * 1 * q * d) ∧
+                    GPsi D ell ψ x = An.gChi p.χ x ∧ ell ψ = An.logDerivativeAtOne p.χ) :
+              ValuesAtX D ell x eps 4 := by
+            intro ψ hψ
+            obtain ⟨ξ,i,j,hij,p,hI,hG,hL⟩ := hMatch ψ hψ
+            haveI := p.ne
+            obtain ⟨hg,hl⟩ := hP.bounds ξ i j hij p.N p.χ hI x hY hX
+            rw [hG,hL]
+            exact ⟨hg.trans (Real.rpow_le_rpow_of_exponent_le hx (by linarith)),hl⟩
+          
+          theorem zeta_pair_windows (eps : ℝ) (he : 0 < eps) (he52 : eps < 1/52) :
+              ∃ X : ℝ, ∀ Y ≥ X, ∃ q d : ℕ,
+                PairGood 1 eps Y (Y ^ (3/2 : ℝ)) q d := by
+            exact QH.pairEx 1 (by norm_num) eps (3/2) he he52 (by norm_num)
+          
+          theorem due_small_budget (K e1 θ : ℝ) (h1 : 0 < e1)
+              (hθ : 1 / 2 < θ) :
+              ∃ e : ℝ, 0 < e ∧ e < e1 ∧ 1 / 2 + K * e ≤ θ := by
+            let e : ℝ := min (e1 / 2) ((θ - 1 / 2) / (2 * (1 + |K|)))
+            have hd : 0 < θ - 1 / 2 := sub_pos.mpr hθ
+            have hden : 0 < 2 * (1 + |K|) := by positivity
+            have he : 0 < e := lt_min (by linarith) (div_pos hd hden)
+            have he1 : e < e1 := (min_le_left _ _).trans_lt (by linarith)
+            have hediv : e ≤ (θ - 1 / 2) / (2 * (1 + |K|)) := min_le_right _ _
+            have hmul := (le_div_iff₀ hden).mp hediv
+            have hprod : K * e ≤ |K| * e :=
+              mul_le_mul_of_nonneg_right (le_abs_self K) he.le
+            have hnonneg : 0 ≤ |K| * e := mul_nonneg (abs_nonneg K) he.le
+            exact ⟨e, he, he1, by nlinarith⟩
+          
+          /-- Conditional quantitative transfer on the genuine Deduction.G,
+              with the geometric producer left explicit. -/
+          theorem due_windows_of_local_budget
+              (K e1 : ℝ) (h1 : 0 < e1)
+              (h : ∀ e : ℝ, 0 < e → e < e1 → ∃ X : ℝ,
+                ∀ Y₀ : ℝ, ∃ Y : ℝ, Y₀ ≤ Y ∧
+                  ∀ y ∈ Set.Icc Y (Y ^ (3 / 2 : ℝ)),
+                    X ≤ y → Deduction.G y ≤ y ^ (1 / 2 + K * e)) :
+              ∀ θ : ℝ, 1 / 2 < θ → θ < 1 → ∀ Y₀ : ℝ, ∃ Y : ℝ,
+                Y₀ ≤ Y ∧ ∀ y ∈ Set.Icc Y (Y ^ (3 / 2 : ℝ)),
+                  Deduction.G y ≤ y ^ θ := by
+            intro θ hθ _ Y₀
+            obtain ⟨e, he, he1, hexp⟩ := due_small_budget K e1 θ h1 hθ
+            obtain ⟨X, hX⟩ := h e he he1
+            obtain ⟨Y, hY, hw⟩ := hX (max Y₀ (max X 1))
+            refine ⟨Y, (le_max_left _ _).trans hY, ?_⟩
+            intro y hy
+            have hb : max X 1 ≤ y := (le_max_right _ _).trans (hY.trans hy.1)
+            have hx : X ≤ y := (le_max_left _ _).trans hb
+            have hy1 : 1 ≤ y := (le_max_right _ _).trans hb
+            exact (hw y hy hx).trans (Real.rpow_le_rpow_of_exponent_le hy1 hexp)
+          
+          theorem gpsi_eq_gchi_of_coefficients {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (ψ : AddChar (E0 × H) ℂ) (p : PChar) (x : ℝ)
+              (hψ : ψ ≠ 0) (hχ : p.χ ≠ 1)
+              (hp : ∀ n : ℕ, n ≠ 0 → primVal D ψ n = p.χ (n : ZMod p.N))
+              (hl : ell ψ = An.logDerivativeAtOne p.χ) :
+              GPsi D ell ψ x = An.gChi p.χ x := by
+            classical
+            haveI := p.ne
+            simp only [GPsi, if_neg hψ, An.gChi, if_neg hχ, An.sumLamChi, hl]
+            congr 1
+            apply Finset.sum_congr rfl
+            intro n hn
+            have hn1 : 1 ≤ n := (Finset.mem_Icc.1 hn).1
+            have hn0 : n ≠ 0 := by omega
+            have hnR : (0 : ℝ) < n := by exact_mod_cast (Nat.pos_of_ne_zero hn0)
+            have hk : 0 < ⌊x⌋₊ := lt_of_lt_of_le Nat.zero_lt_one (le_trans hn1 (Finset.mem_Icc.1 hn).2)
+            have hx0 : 0 ≤ x := by
+              by_contra hneg
+              push_neg at hneg
+              rw [Nat.floor_eq_zero.2 (lt_trans hneg zero_lt_one)] at hk
+              exact lt_irrefl 0 hk
+            have hnx : (n : ℝ) ≤ x := le_trans (by exact_mod_cast (Finset.mem_Icc.1 hn).2) (Nat.floor_le hx0)
+            have hr : 0 ≤ x / (n : ℝ) - 1 := by
+              rw [sub_nonneg, le_div_iff₀ hnR, one_mul]
+              exact hnx
+            rw [hp n hn0, max_eq_left hr]
+          
+          theorem three_modes_of_primitive_coefficients {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (eps Y X x : ℝ) (q d : ℕ) (he : 0 < eps) (hx : 1 ≤ x)
+              (hY : Y ≤ x) (hX : x ≤ X) (hP : PairGood 1 eps Y X q d)
+              (hMatch : ∀ ψ : AddChar (E0 × H) ℂ, (ψ = psC ∨ ψ = chC ∨ ψ = chpsC) →
+                ∃ (ξ : DirichletCharacter ℂ 1) (i j : Fin 2), (i ≠ 0 ∨ j ≠ 0) ∧
+                  ∃ (p : PChar),
+                    An.Induces p.χ (tw (fun a => ξ (a : ZMod 1)) q d i j) (2 * 1 * q * d) ∧
+                    ψ ≠ 0 ∧ p.χ ≠ 1 ∧
+                    (∀ n : ℕ, n ≠ 0 → primVal D ψ n = p.χ (n : ZMod p.N)) ∧
+                    ell ψ = An.logDerivativeAtOne p.χ) :
+              ValuesAtX D ell x eps 4 := by
+            apply three_modes_of_pairGood D ell eps Y X x q d he hx hY hX hP
+            intro ψ hψ
+            obtain ⟨ξ,i,j,hij,p,hI,hn,hp,hc,hl⟩ := hMatch ψ hψ
+            exact ⟨ξ,i,j,hij,p,hI,gpsi_eq_gchi_of_coefficients D ell ψ p x hn hp hc hl,hl⟩
+          
+          /-- Pointwise producer interface: no bound on G itself is a premise. -/
+          def NormalizedPoint (C eps x : ℝ) : Prop :=
+            ∃ (H : Type) (_ : AddCommGroup H) (_ : Fintype H) (_ : DecidableEq H)
+              (D : ArithData H) (S : Finset ℕ)
+              (ell : AddChar (E0 × H) ℂ → ℂ) (N m : ℕ)
+              (TT T2 : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (b b' η X' θ Cd CL : ℝ),
+              HostFactsS D S ∧
+              GrowthInequalityHypotheses D ell N TT T2 a w x eps b b' η X' θ Cd CL (topExcess D N ell TT a w) ∧
+              SmallCosts x eps (fPl H) b η θ Cd CL ∧
+              0 < (TT.card : ℝ) * m * b ∧ 0 < delta2 T2 ∧
+              topExcess D N ell TT a w / ((TT.card : ℝ) * m * b * (delta2 T2 / 2)) +
+                4 / (delta2 T2 * x) ≤ x ^ ((1 : ℝ) / 2 + C * eps)
+          
+          theorem budget_of_normalized_point (C eps : ℝ) (hC : 0 ≤ C) (he : 0 < eps) :
+              ∃ X : ℝ, ∀ x ≥ X, NormalizedPoint C eps x →
+                Deduction.G x ≤ x ^ ((1 : ℝ) / 2 + (C + 2) * eps) := by
+            obtain ⟨X,hX⟩ := absorb_normalized C eps hC he
+            refine ⟨X,?_⟩
+            intro x hx h
+            obtain ⟨H, hA, hF, hDec, D,S,ell,N,m,TT,T2,a,w,b,b',η,X',θ,Cd,CL,hD,hH,hS,hP,hd,hR⟩ := h
+            have hg := @normalized_actual H hA hF hDec D S hD ell N m TT T2 a w x eps b b' η X' θ Cd CL hH hS hP hd
+            apply hX x hx (Deduction.G x) _ _ hR
+            linarith
+          
+          theorem rfh_of_normalized_windows (C e1 : ℝ) (hC : 0 ≤ C) (h1 : 0 < e1)
+              (h : ∀ e : ℝ, 0 < e → e < e1 → ∀ Y₀ : ℝ, ∃ Y : ℝ, Y₀ ≤ Y ∧
+                ∀ y ∈ Set.Icc Y (Y ^ (3 / 2 : ℝ)), NormalizedPoint C e y) :
+              RiemannHypothesis := by
+            apply rh_of_zeta_windows
+            apply due_windows_of_local_budget (C + 2) e1 h1
+            intro e he he1
+            obtain ⟨X,hX⟩ := budget_of_normalized_point C e hC he
+            refine ⟨X,?_⟩
+            intro Y₀
+            obtain ⟨Y,hY,hw⟩ := h e he he1 Y₀
+            exact ⟨Y,hY,fun y hy hx => hX y hx (hw y hy)⟩
+          
+          theorem topExcess_le_of_gapA {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (D : ArithData H) (N m : ℕ) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (TT : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (B : ℝ) (h : ∀ u : H, gapA D N ell TT a w u ≤ B) :
+              topExcess D N ell TT a w ≤ B := by
+            have hn : (0 : ℝ) < Fintype.card H := by exact_mod_cast Fintype.card_pos
+            have hs : (∑ u : H, gapA D N ell TT a w u) ≤ (Fintype.card H : ℝ) * B := by
+              calc
+                (∑ u : H, gapA D N ell TT a w u) ≤ ∑ _u : H, B :=
+                  Finset.sum_le_sum fun u _ => h u
+                _ = _ := by simp [nsmul_eq_mul]
+            change (1 / (Fintype.card H : ℝ)) * (∑ u : H, gapA D N ell TT a w u) ≤ B
+            calc
+              _ ≤ (1 / (Fintype.card H : ℝ)) * ((Fintype.card H : ℝ) * B) :=
+                mul_le_mul_of_nonneg_left hs (by positivity)
+              _ = B := by field_simp
+          
+          theorem topExcess_le_of_geometric_data
+              {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              {U0 : Type} [Fintype U0] {W : U0 → Type}
+              [∀ u, Fintype (W u)] [∀ u, Nonempty (W u)]
+              {Top : Type} [Fintype Top] {m f : ℕ}
+              (Dd : Data U0 W Top m f) (tr : U0 → H) (C : Consts) (Xpp eK K : ℝ)
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (N : ℕ) (TT T2 : Finset H) (a : H → ℝ)
+              (w : H → Fin m → E0 × H → ℝ)
+              (eT : Top ≃ TT) (eP : Fin f ≃ PhiSet (H := H))
+              (hId : IdentU Dd tr D N ell TT a w eT eP)
+              (hSize : SizeData₂ Dd C Xpp) (hWin : ErrWindows Dd C Xpp eK K)
+              (hBN : BNBoundsU Dd T2) (hLarge : LargeX Dd.x Dd.ε K C.cHH eK)
+              (hCover : Function.Surjective tr) :
+              topExcess D N ell TT a w ≤
+                Dd.x ^ (CErr C * Dd.ε) *
+                  errorBracketSizeWindows Dd.x Dd.ε (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a := by
+            apply topExcess_le_of_gapA D N m ell TT a w
+            intro u
+            obtain ⟨v, rfl⟩ := hCover u
+            exact Deduction.ch_top Dd tr C Xpp eK K D ell N TT T2 a w eT eP hId hSize hWin hBN hLarge v
+          
+          theorem normalized_error_of_size_windows
+              (C eps x : ℝ) (n nT nT2 m : ℕ) (b k aE E : ℝ)
+              (hW : SizeWindows C eps x n nT nT2 m b k aE E) :
+              0 < (nT : ℝ) * m * b ∧ 0 < (nT2 : ℝ) / n ∧
+                E / ((nT : ℝ) * m * b * ((nT2 : ℝ) / n / 2)) +
+                  4 / (((nT2 : ℝ) / n) * x) ≤ x ^ ((1 : ℝ) / 2 + (C + 3) * eps) := by
+            have hw := hW
+            obtain ⟨hx3, he, hC, hn, hb, ha0, ha, hT, hd, hT2, hm, hm2, hk, hk2, hE, h26⟩ := hw
+            have hx : 0 < x := by linarith
+            have hnR : (0 : ℝ) < n := by exact_mod_cast hn
+            have hmR : (0 : ℝ) < m :=
+              lt_of_lt_of_le (Real.rpow_pos_of_pos hx _) hm
+            have hTR : (0 : ℝ) < nT := lt_of_lt_of_le (by positivity) hT
+            let P : ℝ := (nT : ℝ) * m * b
+            let δ : ℝ := (nT2 : ℝ) / n
+            let R : ℝ := E / (P * (δ / 2)) + 4 / (δ * x)
+            let X : ℝ := x ^ ((1 : ℝ) / 2 + eps)
+            have hP : 0 < P := by dsimp [P]; positivity
+            have hδ : 0 < δ := lt_of_lt_of_le (Real.rpow_pos_of_pos hx _) hd
+            have hX : 0 ≤ X := by dsimp [X]; positivity
+            have hbal : (nT : ℝ) * m * b * (((nT2 : ℝ) / n) / 2) *
+                ((R + 4 * X) - 4 * x ^ ((1 : ℝ) / 2 + eps)) ≤
+                  E + 2 * (nT : ℝ) * m * b / x := by
+              have hAssoc : 2 * (nT : ℝ) * m * b / x = 2 * P / x := by
+                dsimp only [P]
+                ring
+              rw [hAssoc]
+              change P * (δ / 2) * ((R + 4 * X) - 4 * X) ≤ E + 2 * P / x
+              rw [add_sub_cancel_right]
+              have hEq : P * (δ / 2) * R = E + 2 * P / x := by
+                dsimp only [R]
+                field_simp [ne_of_gt hP, ne_of_gt hδ, ne_of_gt hx] <;> ring
+              exact hEq.le
+            have hg := proposition_size_bound C eps x n nT nT2 m b k aE E (R + 4 * X) hW hbal
+            refine ⟨hP, hδ, ?_⟩
+            change R ≤ x ^ ((1 : ℝ) / 2 + (C + 3) * eps)
+            linarith
+          
+          
+          end BorghettiRH
+          LEAN
+          lake env lean -o RFHMatchedBase.olean RFHMatchedBase.lean 2>&1 | tee ../../bridge/assembly-logs/base.log
+      - name: Microtest cover
+        id: cover
+        continue-on-error: true
+        working-directory: upstream/lean
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFH_cover.lean <<'LEAN'
+          import RFHMatchedBase
+          open Finset UpperTheory.Top Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          theorem cover_of_index_one {H : Type} [AddCommGroup H] (A0 : AddSubgroup H)
+              (h : A0.index = 1) {U : Type} (tr : U → H)
+              (hc : ∀ u ∈ A0, ∃ v, tr v = u) : Function.Surjective tr := by
+            have ht : A0 = ⊤ := AddSubgroup.index_eq_one.mp h
+            intro u
+            apply hc u
+            rw [ht]
+            trivial
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.cover_of_index_one
+          LEAN
+          lake env lean -o RFH_cover.olean RFH_cover.lean 2>&1 | tee ../../bridge/assembly-logs/cover.log
+      - name: Microtest growth
+        id: growth
+        continue-on-error: true
+        working-directory: upstream/lean
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFH_growth.lean <<'LEAN'
+          import RFHMatchedBase
+          open Finset UpperTheory.Top Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          theorem growth_of_index_one {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              (A0 : AddSubgroup H) (hi : A0.index = 1)
+              (D : ArithData H) (ell : AddChar (E0 × H) ℂ → ℂ)
+              (N m : ℕ) (TT T2 : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (x eps b b' η X' θ Cd CL : ℝ)
+              (hx : 3 ≤ x) (hb : 0 < b) (hc : 0 ≤ Cd)
+              (hSz : SizesA A0 TT T2 a w N x b b' η X' θ)
+              (hThin : ThinScales D ell X' θ) (hDer : DerivInt D ell Cd)
+              (hVal : ValuesAtX D ell x eps CL) :
+              GrowthInequalityHypotheses D ell N TT T2 a w x eps b b' η X' θ Cd CL
+                (topExcess D N ell TT a w) := by
+            have ht : A0 = ⊤ := AddSubgroup.index_eq_one.mp hi
+            have ha0 : ∀ u : H, u ∈ A0 := by intro u; rw [ht]; trivial
+            obtain ⟨hη,hXp,hbp,hbX,hθ,ha,hp,hth,hthin,hN⟩ := hSz
+            exact ⟨hx,hb,hη,hXp,hbp,hbX,hθ,hc,ha,
+              ⟨fun u j ρ hρ => hp u (ha0 u) j ρ hρ,
+                fun u j ρ hρ => hth u (ha0 u) j ρ hρ,
+                fun u j ρ hρ hn => hthin u (ha0 u) j ρ hρ hn⟩,
+              fun u j t ρ hT hρ => hN u (ha0 u) j t ρ hT hρ,
+              le_rfl,hThin,lipschitz_weight_all H D ell,hDer,hVal⟩
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.growth_of_index_one
+          LEAN
+          lake env lean -o RFH_growth.olean RFH_growth.lean 2>&1 | tee ../../bridge/assembly-logs/growth.log
+      - name: Microtest rest
+        id: rest
+        continue-on-error: true
+        working-directory: upstream/lean
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFH_rest.lean <<'LEAN'
+          import RFHMatchedBase
+          open Finset UpperTheory.Top Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          set_option maxHeartbeats 2000000 in
+          theorem size_of_rest_and_error
+              {H : Type} [AddCommGroup H] [Fintype H] [DecidableEq H]
+              {U : Type} [Fintype U] {W : U → Type} [∀ u, Fintype (W u)] [∀ u, Nonempty (W u)]
+              {Top : Type} [Fintype Top] {m f : ℕ}
+              (Dd : Data U W Top m f) (C : Consts) (Xpp eK K E : ℝ) (TT T2 : Finset H)
+              (hWin : ErrWindows Dd C Xpp eK K)
+              (hRest : RestSize Dd.ε Dd.x (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a)
+              (hE : E ≤ Dd.x ^ (CErr C * Dd.ε) *
+                errorBracketSizeWindows Dd.x Dd.ε (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a)
+              (h3 : 3 ≤ Dd.x) (h26 : 26 ≤ Dd.x ^ (3 * Dd.ε / 8)) :
+              SizeWindows (CErr C) Dd.ε Dd.x (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a E := by
+            have hh := hWin
+            unfold ErrWindows ErrWindows0 ConstsBound at hh
+            have he : 0 < Dd.ε := by tauto
+            have hb1 : 1 ≤ Dd.b := by tauto
+            have ha : Dd.x * Dd.b ≤ Dd.a := by tauto
+            have hmU : (m : ℝ) ≤ Dd.x ^ ((1 : ℝ) / 2 + Dd.ε / 2) := by tauto
+            have hkL : Dd.x * m ≤ Dd.k := by tauto
+            have hcD : 0 ≤ C.eDiv := by tauto
+            have hcL : 0 ≤ C.eLoss := by tauto
+            have hC : 0 ≤ CErr C := by unfold CErr; linarith
+            have hx : 0 < Dd.x := by linarith
+            have hb : 0 < Dd.b := by linarith
+            have ha0 : 0 ≤ Dd.a := le_trans (mul_nonneg hx.le hb.le) ha
+            obtain ⟨hA,hTT,hT2,hmL,hkU⟩ := hRest
+            refine ⟨h3,he,hC,Fintype.card_pos,hb,ha0,hA,hTT,hT2,Finset.card_le_univ T2,hmL,hmU,hkL,hkU,?_,h26⟩
+            simpa only [errorBracketSizeWindows] using hE
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.size_of_rest_and_error
+          LEAN
+          lake env lean -o RFH_rest.olean RFH_rest.lean 2>&1 | tee ../../bridge/assembly-logs/rest.log
+      - name: Test UNO DUE TRE matched assembly
+        if: ${{ (steps.cover.outcome == 'success' && steps.growth.outcome == 'success' && steps.rest.outcome == 'success') }}
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHMatchedChain.lean <<'LEAN'
+          import RFH_cover
+          import RFH_growth
+          import RFH_rest
+          import RFHMatchedBase
+          open Finset UpperTheory.Top Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          /-- All geometric and arithmetic hypotheses concern the very same D, ell, TT and w. -/
+          def MatchedCorePoint (B eps x : ℝ) : Prop :=
+            ∃ (H : Type) (_ : AddCommGroup H) (_ : Fintype H) (_ : DecidableEq H)
+              (U : Type) (_ : Fintype U) (W : U → Type) (_ : ∀ u, Fintype (W u)) (_ : ∀ u, Nonempty (W u))
+              (Top : Type) (_ : Fintype Top) (m f : ℕ)
+              (Dd : Data U W Top m f) (tr : U → H) (A0 : AddSubgroup H) (C : Consts) (Xpp eK K : ℝ)
+              (D : ArithData H) (S : Finset ℕ) (ell : AddChar (E0 × H) ℂ → ℂ) (N : ℕ)
+              (TT T2 : Finset H) (a : H → ℝ) (w : H → Fin m → E0 × H → ℝ)
+              (eT : Top ≃ TT) (eP : Fin f ≃ PhiSet (H := H)) (η X' θ Cd CL : ℝ),
+              Dd.x = x ∧ Dd.ε = eps ∧ CErr C ≤ B ∧ A0.index = 1 ∧
+              (∀ u ∈ A0, ∃ v, tr v = u) ∧ HostFactsS D S ∧
+              IdentU Dd tr D N ell TT a w eT eP ∧ SizeData₂ Dd C Xpp ∧
+              ErrWindows Dd C Xpp eK K ∧ BNBoundsU Dd T2 ∧ LargeX Dd.x Dd.ε K C.cHH eK ∧
+              RestSize Dd.ε Dd.x (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a ∧
+              3 ≤ Dd.x ∧ 26 ≤ Dd.x ^ (3 * Dd.ε / 8) ∧
+              SizesA A0 TT T2 a w N Dd.x Dd.b Dd.b' η X' θ ∧ ThinScales D ell X' θ ∧
+              0 ≤ Cd ∧ DerivInt D ell Cd ∧ ValuesAtX D ell Dd.x Dd.ε CL ∧
+              SmallCosts Dd.x Dd.ε (fPl H) Dd.b η θ Cd CL
+          
+          set_option maxHeartbeats 3000000 in
+          theorem normalized_point_of_matched_core (B eps x : ℝ) (h : MatchedCorePoint B eps x) :
+              NormalizedPoint (B+3) eps x := by
+            obtain ⟨H,iH,iF,iD,U,iU,W,iW,iNW,Top,iT,m,f,Dd,tr,A0,C,Xpp,eK,K,
+              D,S,ell,N,TT,T2,a,w,eT,eP,η,X',θ,Cd,CL,hx,he,hB,hi,hcov,hHost,hId,hSize,hWin,hBN,hLarge,hRest,
+              h3,h26,hSz,hThin,hCd,hDer,hVal,hCost⟩ := h
+            subst x
+            subst eps
+            have hCover := cover_of_index_one A0 hi tr hcov
+            have hE := topExcess_le_of_geometric_data Dd tr C Xpp eK K D ell N TT T2 a w eT eP
+              hId hSize hWin hBN hLarge hCover
+            have hW := size_of_rest_and_error Dd C Xpp eK K (topExcess D N ell TT a w) TT T2 hWin hRest hE h3 h26
+            have ⟨hP,hd,hR⟩ := normalized_error_of_size_windows (CErr C) Dd.ε Dd.x
+              (Fintype.card H) TT.card T2.card m Dd.b Dd.k Dd.a (topExcess D N ell TT a w) hW
+            have hb : 0 < Dd.b := hW.2.2.2.2.1
+            have hε : 0 < Dd.ε := hW.2.1
+            have hx1 : 1 ≤ Dd.x := by linarith
+            have hGrowth := growth_of_index_one A0 hi D ell N m TT T2 a w Dd.x Dd.ε Dd.b Dd.b' η X' θ Cd CL
+              h3 hb hCd hSz hThin hDer hVal
+            have hExp : Dd.x ^ ((1 : ℝ) / 2 + (CErr C + 3) * Dd.ε) ≤
+                Dd.x ^ ((1 : ℝ) / 2 + (B + 3) * Dd.ε) :=
+              Real.rpow_le_rpow_of_exponent_le hx1 (by nlinarith [mul_nonneg (sub_nonneg.mpr hB) hε.le])
+            exact ⟨H,iH,iF,iD,D,S,ell,N,m,TT,T2,a,w,Dd.b,Dd.b',η,X',θ,Cd,CL,hHost,hGrowth,hCost,
+              hP,hd,hR.trans hExp⟩
+          
+          theorem rfh_of_matched_core_windows (B e1 : ℝ) (hB : 0 ≤ B) (h1 : 0 < e1)
+              (h : ∀ eps : ℝ, 0 < eps → eps < e1 → ∀ Y0 : ℝ, ∃ Y : ℝ, Y0 ≤ Y ∧
+                ∀ y ∈ Set.Icc Y (Y ^ (3/2 : ℝ)), MatchedCorePoint B eps y) : RiemannHypothesis := by
+            apply rfh_of_normalized_windows (B+3) e1 (by linarith) h1
+            intro eps he he1 Y0
+            obtain ⟨Y,hY,hYwin⟩ := h eps he he1 Y0
+            exact ⟨Y,hY,fun y hy => normalized_point_of_matched_core B eps y (hYwin y hy)⟩
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.normalized_point_of_matched_core
+          #print axioms BorghettiRH.rfh_of_matched_core_windows
+          open Lean Elab Command
+          run_cmd do
+            let env ← getEnv
+            let edges : List (Name × Name) := [
+              (``BorghettiRH.normalized_point_of_matched_core, ``BorghettiRH.cover_of_index_one),
+              (``BorghettiRH.normalized_point_of_matched_core, ``BorghettiRH.growth_of_index_one),
+              (``BorghettiRH.normalized_point_of_matched_core, ``BorghettiRH.size_of_rest_and_error),
+              (``BorghettiRH.normalized_point_of_matched_core, ``BorghettiRH.topExcess_le_of_geometric_data),
+              (``BorghettiRH.normalized_point_of_matched_core, ``BorghettiRH.normalized_error_of_size_windows),
+              (``BorghettiRH.rfh_of_matched_core_windows, ``BorghettiRH.normalized_point_of_matched_core),
+              (``BorghettiRH.rfh_of_matched_core_windows, ``BorghettiRH.rfh_of_normalized_windows)]
+            for (a,b) in edges do
+              let some ci := env.find? a | throwError "Missing declaration"
+              let some v := ci.value? (allowOpaque := true) | throwError "Missing proof"
+              unless v.getUsedConstants.contains b do
+                throwError m!"Missing edge {a} -> {b}"
+              logInfo m!"VERIFIED_CHAIN {a} -> {b}"
+          
+          LEAN
+          lake env lean -o RFHMatchedChain.olean RFHMatchedChain.lean 2>&1 | tee ../../bridge/assembly-logs/chain.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          log = '\n'.join(Path('../../bridge/assembly-logs/'+n+'.log').read_text() for n in ['cover','growth','rest','chain'])
+          for name in ['cover_of_index_one','growth_of_index_one','size_of_rest_and_error','normalized_point_of_matched_core','rfh_of_matched_core_windows']:
+              m = re.search(r"BorghettiRH\."+name+r"' depends on axioms:\s*\[([^\]]*)\]",log)
+              assert m, name
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in log and log.count('VERIFIED_CHAIN') == 7
+          PY
+      - name: Require all microtest outcomes
+        if: ${{ (!cancelled() && (steps.cover.outcome != 'skipped' || steps.growth.outcome != 'skipped' || steps.rest.outcome != 'skipped')) }}
+        run: |
+          test "${{ steps.cover.outcome }} ${{ steps.growth.outcome }} ${{ steps.rest.outcome }}" = "success success success"
+      - name: Build only local adapter imports
+        working-directory: upstream/lean
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.PrimitiveCosets.PrimRead Development.AutomorphicArithmetic.PrimitiveCosets.PrimInj Development.AutomorphicArithmetic.PrimitiveCosets.ToEBij Development.AutomorphicArithmetic.PrimitiveCosets.hostFactsS Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.FrameFacts 2>&1 | tee ../../bridge/assembly-logs/adapter-imports.log
+      - name: Check RFHFinalLocal
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHFinalLocal.lean <<'LEAN'
+          import Development.AutomorphicArithmetic.PrimitiveCosets.PrimRead
+          import Development.AutomorphicArithmetic.PrimitiveCosets.PrimInj
+          import Development.AutomorphicArithmetic.PrimitiveCosets.ToEBij
+          import Development.AutomorphicArithmetic.PrimitiveCosets.hostFactsS
+          import Formalism.SharpRestriction.RamificationFrobenius.TotientGaloisClasses.FrameFacts
+          open Finset UpperTheory.Comparison₂ Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Formalism.LFunctionChainParameters.LHost Deduction.CH
+          #check Formalism.HC.Frame
+          #check Formalism.HC.HostAx
+          #check Formalism.HC.EAtH
+          #check UpperTheory.Comparison₂.CoreAtH
+          #check UpperTheory.Comparison₂.chr
+          #check UpperTheory.Comparison₂.prim_inj
+          #check UpperTheory.Comparison₂.toE_bij
+          #check Level.cyc
+          #check PChar.one
+          set_option autoImplicit false
+          noncomputable section
+          namespace BorghettiRH
+          def ZetaCoreWindows : Prop :=
+            ∃ eD eL e1 : ℝ, 0 ≤ eD ∧ 0 ≤ eL ∧ 0 < e1 ∧
+              ∀ eps : ℝ, 0 < eps → eps < e1 →
+                ∃ K cHH eK : ℝ, ∀ Y0 : ℝ, ∃ Y : ℝ, Y0 ≤ Y ∧
+                  ∀ x ∈ Set.Icc Y (Y ^ (3/2 : ℝ)),
+                    ∃ (φ : Frame) (H : HostAx φ) (TT : Finset φ.A),
+                      EAtH (Level.cyc PChar.one) H.toHostRaw TT x eps 4 ∧
+                      CoreAtH H.toHostRaw TT eD eL K cHH eK eps x
+          
+          theorem singleton_kept : (Level.cyc PChar.one).KEPT = {PChar.one} := by
+            classical
+            ext ψ
+            simp only [Finset.mem_singleton]
+            constructor
+            · intro hp
+              change ψ ∈ (Level.ofSub (Subgroup.zpowers (1 : DirichletCharacter ℂ 1))).KEPT at hp
+              obtain ⟨χ, _, hχ⟩ := (Level.mem_ofSub _ _).mp hp
+              obtain rfl := DirichletCharacter.level_one χ
+              exact hχ.symm.trans (PChar.of_one 1)
+            · rintro rfl
+              exact Level.mem_cyc PChar.one
+          
+          theorem singleton_order_one : (Level.cyc PChar.one).o = 1 := by
+            change Nat.card ↥(Subgroup.zpowers (1 : DirichletCharacter ℂ 1)) = 1
+            rw [Subgroup.zpowers_one_eq_bot]
+            exact Nat.card_eq_one_iff_unique.2 ⟨inferInstance, inferInstance⟩
+          
+          theorem chr_eval (φ : Frame) (ψ : AddChar (E0 × φ.A) ℂ) (g : φ.GG) :
+              ((chr φ ψ g : ℂˣ) : ℂ) = ψ (Multiplicative.toAdd (toE φ g)) := rfl
+          
+          theorem three_mode_trivial_nonzero (φ : Frame) (ψ : AddChar (E0 × φ.A) ℂ)
+              (h : ψ = psC ∨ ψ = chC ∨ ψ = chpsC) :
+              ψ ≠ 0 ∧ ∀ t : φ.A, ψ ((0 : E0),t) = 1 := by
+            rcases h with rfl | rfl | rfl
+            · constructor
+              · intro hz
+                have h := DFunLike.congr_fun hz (sg : E0 × φ.A)
+                norm_num [psC,sg,AddChar.zero_apply] at h
+              · intro t
+                simp [psC]
+            · constructor
+              · intro hz
+                have h := DFunLike.congr_fun hz (sgc0 : E0 × φ.A)
+                norm_num [chC,sgc0,AddChar.zero_apply] at h
+              · intro t
+                simp [chC]
+            · constructor
+              · intro hz
+                have h := DFunLike.congr_fun hz (sgc0 : E0 × φ.A)
+                norm_num [chpsC,AddChar.mul_apply,psC,chC,sgc0,AddChar.zero_apply] at h
+              · intro t
+                simp [chpsC,AddChar.mul_apply,psC,chC]
+          
+          theorem bounded_of_nonzero_trivial (φ : Frame) (H : HostAx φ)
+              (ψ : AddChar (E0 × φ.A) ℂ) (hne : ψ ≠ 0)
+              (ht : ∀ t : φ.A, ψ ((0 : E0),t) = 1)
+              (hsg : ψ (sgc0 : E0 × φ.A) = 1 ∨ ψ sgc0 = -1) :
+              chr φ ψ ∈ H.toHostRaw.Bounded (Level.cyc PChar.one).KEPT := by
+            have hT : Frame.TrivialOnFirstFactor (chr φ ψ) := by
+              intro s hs
+              apply Units.ext
+              rw [Units.val_one,chr_eval,(toE_bij φ).2.2.2.1]
+              exact ht s
+            have hnk : ¬ H.toHostRaw.Kept (Level.cyc PChar.one).KEPT (chr φ ψ) := by
+              intro hk
+              have hp := (HostRaw.kept_iff _ _ _).1 hk
+              rw [singleton_kept,Finset.mem_singleton] at hp
+              have heq : chr φ ψ = 1 :=
+                (prim_inj φ H).1 (hp.trans (prim_inj φ H).2.symm)
+              apply hne
+              rw [AddChar.eq_zero_iff]
+              intro a
+              obtain ⟨g,hg⟩ := (toE_bij φ).1.2 (Multiplicative.ofAdd a)
+              have h := chr_eval φ ψ g
+              rw [heq,MonoidHom.one_apply,Units.val_one,hg] at h
+              exact h.symm
+            have hEval : ((chr φ ψ φ.iod : ℂˣ) : ℂ) = ψ sgc0 := by
+              rw [chr_eval,(toE_bij φ).2.1] <;> rfl
+            rcases hsg with h1 | h2
+            · exact Or.inl ⟨⟨hT,Units.ext (hEval.trans h1)⟩,hnk⟩
+            · exact Or.inr ⟨hT,Units.ext (hEval.trans h2)⟩
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.singleton_kept
+          #print axioms BorghettiRH.singleton_order_one
+          #print axioms BorghettiRH.chr_eval
+          #print axioms BorghettiRH.three_mode_trivial_nonzero
+          #print axioms BorghettiRH.bounded_of_nonzero_trivial
+          LEAN
+          lake env lean -o RFHFinalLocal.olean RFHFinalLocal.lean 2>&1 | tee ../../bridge/assembly-logs/RFHFinalLocal.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('../../bridge/assembly-logs/RFHFinalLocal.log').read_text()
+          for n in ["singleton_kept","singleton_order_one","chr_eval","three_mode_trivial_nonzero","bounded_of_nonzero_trivial"]:
+              m = re.search(r'BorghettiRH\.'+n+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              assert m,n
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in s
+          PY
+      - name: Check RFHFinalValues
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHFinalValues.lean <<'LEAN'
+          import RFHFinalLocal
+          open Finset UpperTheory.Comparison₂ Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Formalism.LFunctionChainParameters.LHost Deduction.CH
+          set_option autoImplicit false
+          noncomputable section
+          namespace BorghettiRH
+          theorem singleton_values (φ : Frame) (H : HostAx φ)
+              (TT : Finset φ.A) (x eps : ℝ) (ell : AddChar (E0 × φ.A) ℂ → ℂ)
+              (hE : EAtH (Level.cyc PChar.one) H.toHostRaw TT x eps 4)
+              (hell : HostAddCharCompatible H.toHostRaw ell) :
+              ValuesAtX (arith H.toHostRaw) ell x eps 4 := by
+            intro ψ hψ
+            obtain ⟨hne,ht⟩ := three_mode_trivial_nonzero φ ψ hψ
+            have hs : ψ (sgc0 : E0 × φ.A) = 1 ∨ ψ sgc0 = -1 := by
+              rcases hψ with rfl | rfl | rfl
+              · left; simp [psC,sgc0]
+              · right; norm_num [chC,sgc0]
+              · right; norm_num [chpsC,AddChar.mul_apply,chC,psC,sgc0]
+            have hb := bounded_of_nonzero_trivial φ H ψ hne ht hs
+            let p := H.toHostRaw.prim (chr φ ψ)
+            haveI := p.ne
+            have hp : H.toHostRaw.IsPrimOf (chr φ ψ) p.χ := H.toHostRaw.isPrimOf_prim _
+            have hr := prim_read φ H ell hell ψ
+            constructor
+            · rw [hr.2 x]
+              exact hE.bdG _ hb _ _ hp
+            · rw [hr.1 hne]
+              exact hE.bdL _ hb _ _ hp
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.singleton_values
+          LEAN
+          lake env lean -o RFHFinalValues.olean RFHFinalValues.lean 2>&1 | tee ../../bridge/assembly-logs/RFHFinalValues.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('../../bridge/assembly-logs/RFHFinalValues.log').read_text()
+          for n in ["singleton_values"]:
+              m = re.search(r'BorghettiRH\.'+n+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              assert m,n
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in s
+          PY
+      - name: Build size and large-scale adapter dependency
+        working-directory: upstream/lean
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Formalism.SizeWindowBrackets.ChainSlopeWindows.PChain 2>&1 | tee ../../bridge/assembly-logs/pchain.log
+      - name: Check RFHFinalPack
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHFinalPack.lean <<'LEAN'
+          import RFHFinalValues
+          import RFHMatchedChain
+          import Formalism.SizeWindowBrackets.ChainSlopeWindows.PChain
+          open Finset UpperTheory.Comparison₂ Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Formalism.LFunctionChainParameters.LHost Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          set_option maxHeartbeats 3000000 in
+          theorem matched_of_core_at_host
+              (eD eL K cHH eK Cd eps x : ℝ) (φ : Frame) (H : HostAx φ) (TT : Finset φ.A)
+              (hE : EAtH (Level.cyc PChar.one) H.toHostRaw TT x eps 4)
+              (hCore : CoreAtH H.toHostRaw TT eD eL K cHH eK eps x)
+              (hCd : 0 ≤ Cd)
+              (hDer : ∀ (A : Type) [AddCommGroup A] [Fintype A] [DecidableEq A]
+                  (D : ArithData A) (ell : AddChar (E0 × A) ℂ → ℂ), DerivInt D ell Cd)
+              (hX : XLarge K cHH eK Cd 4 eps x) :
+              MatchedCorePoint (eD+eL+3) eps x := by
+            obtain ⟨U,iU,tr,W,iW,iNW,Top,iT,m,f,Dd,C,Xpp,ell,N,T2,a,w,eT,eP,η,X',θ,
+              hell,hxx,he,hD,hL,hHH,hcov,hId,hSize,hWin,hBN,hSz,hThin,hCost,hRest,hT2⟩ := hCore
+            subst x
+            subst eps
+            have hi : φ.A0.index = 1 := φ.index_A0_eq_o.trans (hE.o_eq.trans singleton_order_one)
+            have hB : CErr C ≤ eD+eL+3 := by unfold CErr; linarith
+            obtain ⟨h3,h26,hLarge,hMove⟩ := hX
+            have hlarge : LargeX Dd.x Dd.ε K C.cHH eK := by
+              have hh := hWin
+              unfold ErrWindows ErrWindows0 ConstsBound at hh
+              have heK : 0 ≤ eK := by tauto
+              refine ⟨hLarge.1,le_trans ?_ hLarge.2⟩
+              unfold KBig
+              exact mul_le_mul_of_nonneg_right
+                (mul_le_mul_of_nonneg_left (by linarith) (by positivity)) (by linarith)
+            have hV := singleton_values φ H TT Dd.x Dd.ε ell hE hell
+            have hHost := hostFactsS φ H
+            have hSmall : SmallCosts Dd.x Dd.ε (fPl φ.A) Dd.b η θ Cd 4 :=
+              ⟨hMove,hCost.1,hCost.2⟩
+            exact ⟨φ.A,inferInstance,inferInstance,inferInstance,U,iU,W,iW,iNW,Top,iT,m,f,Dd,tr,φ.A0,C,Xpp,eK,K,
+              arith H.toHostRaw,insert H.q H.small,ell,N,TT,T2,a,w,eT,eP,η,X',θ,Cd,4,
+              rfl,rfl,hB,hi,hcov,hHost,hId,hSize,hWin,hBN,hlarge,hRest,h3,h26,hSz,hThin,hCd,
+              hDer φ.A (arith H.toHostRaw) ell,hV,hSmall⟩
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.matched_of_core_at_host
+          LEAN
+          lake env lean -o RFHFinalPack.olean RFHFinalPack.lean 2>&1 | tee ../../bridge/assembly-logs/RFHFinalPack.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('../../bridge/assembly-logs/RFHFinalPack.log').read_text()
+          for n in ["matched_of_core_at_host"]:
+              m = re.search(r'BorghettiRH\.'+n+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              assert m,n
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in s
+          PY
+      - name: Check RFHFinalConditional
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHFinalConditional.lean <<'LEAN'
+          import RFHFinalPack
+          open Finset UpperTheory.Comparison₂ Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Formalism.LFunctionChainParameters.LHost Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          theorem rfh_of_zeta_core_windows (h : ZetaCoreWindows) : RiemannHypothesis := by
+            obtain ⟨eD,eL,e1,hD,hL,h1,h⟩ := h
+            obtain ⟨Cd,hCd,hDer⟩ := derivative_integral_all
+            apply rfh_of_matched_core_windows (eD+eL+3) e1 (by linarith) h1
+            intro eps he he1 Y0
+            obtain ⟨K,cHH,eK,hW⟩ := h eps he he1
+            obtain ⟨X,hX⟩ := x_large_eventually K cHH eK Cd 4 eps he
+            obtain ⟨Y,hY,hw⟩ := hW (max Y0 X)
+            refine ⟨Y,(le_max_left _ _).trans hY,?_⟩
+            intro x hx
+            obtain ⟨φ,H,TT,hE,hCore⟩ := hw x hx
+            exact matched_of_core_at_host eD eL K cHH eK Cd eps x φ H TT hE hCore hCd hDer
+              (hX x ((le_max_right _ _).trans (hY.trans hx.1)))
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.rfh_of_zeta_core_windows
+          LEAN
+          lake env lean -o RFHFinalConditional.olean RFHFinalConditional.lean 2>&1 | tee ../../bridge/assembly-logs/RFHFinalConditional.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('../../bridge/assembly-logs/RFHFinalConditional.log').read_text()
+          for n in ["rfh_of_zeta_core_windows"]:
+              m = re.search(r'BorghettiRH\.'+n+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              assert m,n
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in s
+          PY
+      - name: Build exact preterminal TopG interface
+        working-directory: upstream/lean
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build Development.AutomorphicArithmetic.CharacterBoxes.RFHTopGInterface 2>&1 | tee ../../bridge/assembly-logs/topg-interface.log
+          test -f .lake/build/lib/lean/Development/AutomorphicArithmetic/CharacterBoxes/RFHTopGInterface.olean
+      - name: Check RFHFinalZeta
+        working-directory: upstream/lean
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHFinalZeta.lean <<'LEAN'
+          import RFHFinalConditional
+          import Development.AutomorphicArithmetic.CharacterBoxes.RFHTopGInterface
+          import Development.AutomorphicArithmetic.PrimitiveCosets.CoreAtH
+          import Development.AutomorphicArithmetic.CharacterBoxes.SupplyChi
+          open Finset UpperTheory.Top UpperTheory.Comparison₂ Formalism Formalism.D5 Formalism.HC Formalism.RankGapBounds.WeightedMeanData Formalism.LFunctionChainParameters.WeightedSlopeBounds Formalism.LFunctionChainParameters.characterSumData Formalism.LFunctionChainParameters.ThickSetMeanBounds Formalism.LFunctionChainParameters.LErr Formalism.LFunctionChainParameters.LChain Formalism.LFunctionChainParameters.LHost Deduction.CH
+          noncomputable section
+          namespace BorghettiRH
+          open GlobalTheory.EX
+          theorem core_relax {φ : Frame} {H : HostRaw φ} {TT : Finset φ.A}
+              {eD eL K cHH eK eps x : ℝ}
+              (h : CoreAtH H TT eD eL K cHH eK eps x) :
+              CoreAtH H TT (max eD 0) (max eL 0) K cHH eK eps x := by
+            obtain ⟨U,iU,tr,W,iW,iNW,Top,iT,m,f,Dd,C,Xpp,ell,N,T2,a,w,eT,eP,η,X',θ,
+              hell,hx,he,hD,hL,hHH,hcov,hId,hSize,hWin,hBN,hSz,hThin,hCost,hRest,hT2⟩ := h
+            exact ⟨U,iU,tr,W,iW,iNW,Top,iT,m,f,Dd,C,Xpp,ell,N,T2,a,w,eT,eP,η,X',θ,
+              hell,hx,he,hD.trans (le_max_left _ _),hL.trans (le_max_left _ _),hHH,hcov,hId,hSize,hWin,hBN,hSz,hThin,hCost,hRest,hT2⟩
+          
+          set_option maxHeartbeats 2000000 in
+          theorem zeta_core_windows_of_topG (hTop : TopG) (hV : VWinAt PChar.one 401) :
+              ZetaCoreWindows := by
+            obtain ⟨eD,eL,e1,h1,h⟩ := hTop (3/2) (GChi PChar.one) (by norm_num)
+              (supplyChi PChar.one hV) (hypV_of_cls PChar.one (3/2))
+            refine ⟨max eD 0,max eL 0,e1,le_max_right _ _,le_max_right _ _,h1,?_⟩
+            intro eps he he1
+            obtain ⟨Fm,c,K,cHH,eK,CL,x0,hT⟩ := h eps he he1
+            refine ⟨K,cHH,eK,?_⟩
+            intro Y0
+            have hw : HasWindows Fm.Win (3/2) := (windows_iff Fm.toFamCore (3/2)).1 c.1
+            obtain ⟨Y,hY,hwin⟩ := hw (max Y0 (max x0 (Fm.x1+1)))
+            refine ⟨Y,(le_max_left _ _).trans hY,?_⟩
+            intro x hx
+            have hx0 : x0 ≤ x := (le_max_left x0 (Fm.x1+1)).trans ((le_max_right Y0 _).trans (hY.trans hx.1))
+            have hxE : Fm.x1+1 ≤ x := (le_max_right x0 (Fm.x1+1)).trans ((le_max_right Y0 _).trans (hY.trans hx.1))
+            obtain ⟨i,hi⟩ := tiedCore_of_chainTied Fm eD eL K cHH eK CL x (hT x hx0 (hwin x hx.1 hx.2))
+            have hE := (c.2 x (by linarith) i).1
+            rw [Fm.L_x x i (by linarith), Fm.L_eps x i] at hE
+            exact ⟨_,(Fm.D x i).host.toHostAx, (Fm.D x i).host.TT,hE,core_relax hi⟩
+          
+          
+          end BorghettiRH
+          #print axioms BorghettiRH.core_relax
+          #print axioms BorghettiRH.zeta_core_windows_of_topG
+          LEAN
+          lake env lean -o RFHFinalZeta.olean RFHFinalZeta.lean 2>&1 | tee ../../bridge/assembly-logs/RFHFinalZeta.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('../../bridge/assembly-logs/RFHFinalZeta.log').read_text()
+          for n in ["core_relax","zeta_core_windows_of_topG"]:
+              m = re.search(r'BorghettiRH\.'+n+r"' depends on axioms:\s*\[([^\]]*)\]",s)
+              assert m,n
+              assert {x.strip() for x in m.group(1).split(',') if x.strip()} <= {'propext','Classical.choice','Quot.sound'}
+          assert 'sorryAx' not in s
+          PY
+      - name: Certify the conditional producer-input theorem and real dependency closure
+        working-directory: upstream/lean
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LEAN_PATH=".${LEAN_PATH:+:$LEAN_PATH}"
+          cat > RFHProducerInputs.lean <<'LEAN'
+          import RFHFinalZeta
+          import Lean.Util.FoldConsts
+          open Formalism.BasicNotions Formalism.MainNotions Formalism.HC UpperTheory.Top
+          namespace BorghettiRH
+          /-- The two genuine producer inputs remain explicit. No RH assumption. -/
+          theorem rfh_of_producer_inputs (hTop : TopG) (hV : VWinAt PChar.one 401) :
+              RiemannHypothesis :=
+            rfh_of_zeta_core_windows (zeta_core_windows_of_topG hTop hV)
+          end BorghettiRH
+          #print axioms BorghettiRH.zeta_core_windows_of_topG
+          #print axioms BorghettiRH.rfh_of_producer_inputs
+          open Lean Elab Command
+          set_option maxHeartbeats 0 in
+          run_cmd do
+            let env ← getEnv
+            for (root, required, isBridge) in [
+              (``BorghettiRH.zeta_core_windows_of_topG,
+                [``UpperTheory.Top.supplyChi, ``QH.pairEx, ``UpperTheory.Top.winPairs,
+                 ``BorghettiRH.b2_actual_h78, ``OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re], true),
+              (``BorghettiRH.rfh_of_producer_inputs,
+                [``BorghettiRH.zeta_core_windows_of_topG, ``BorghettiRH.rfh_of_zeta_core_windows,
+                 ``BorghettiRH.rfh_of_matched_core_windows, ``BorghettiRH.normalized_point_of_matched_core,
+                 ``BorghettiRH.rh_of_zeta_windows, ``BorghettiRH.budget_of_normalized_point,
+                 ``BorghettiRH.due_windows_of_local_budget, ``QH.pairEx,
+                 ``BorghettiRH.b2_actual_h78, ``OAI.DirichletCharacter.LFunction_ne_zero_of_seven_eighths_lt_re], false)] do
+              let mut seen : Std.HashSet Name := {}
+              let mut todo : Array Name := #[root]
+              while !todo.isEmpty do
+                let n := todo.back!
+                todo := todo.pop
+                if seen.contains n then continue
+                seen := seen.insert n
+                let ns := n.toString
+                if ns.startsWith "UpperTheory.FinalTheorems." ||
+                   ns == "UpperTheory.Top.zeroFreeAll_of_topG" ||
+                   ns == "UpperTheory.LiteratureTheorems.every_character_of_literature_of_vWin" ||
+                   ns == "UpperTheory.Top.zero_free_all_of_green_v_win" ||
+                   ns == "UpperTheory.Top.every_character_of_green_v_win" ||
+                   ns == "sorryAx" || (isBridge && ns == "RiemannHypothesis") then
+                  throwError m!"Forbidden dependency in {root}: {n}"
+                if let some ci := env.find? n then
+                  for dep in ci.type.getUsedConstants do
+                    if !seen.contains dep then todo := todo.push dep
+                  if let some v := ci.value? (allowOpaque := true) then
+                    for dep in v.getUsedConstants do
+                      if !seen.contains dep then todo := todo.push dep
+              for n in required do
+                unless seen.contains n do throwError m!"Missing actual dependency in {root}: {n}"
+                logInfo m!"VERIFIED_CLOSURE_EDGE {root} -> {n}"
+              logInfo m!"AUDITED_CONDITIONAL_CLOSURE {root} {seen.size}"
+          LEAN
+          lake env lean -o RFHProducerInputs.olean RFHProducerInputs.lean 2>&1 | tee ../../bridge/assembly-logs/RFHProducerInputs.log
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path("../../bridge/assembly-logs/RFHProducerInputs.log").read_text()
+          for n in ["zeta_core_windows_of_topG", "rfh_of_producer_inputs"]:
+              m = re.search(r"BorghettiRH\."+n+r"' depends on axioms:\s*\[([^\]]*)\]", s)
+              assert m, n
+              assert {x.strip() for x in m.group(1).split(",") if x.strip()} <= {"propext", "Classical.choice", "Quot.sound"}
+          assert s.count("AUDITED_CONDITIONAL_CLOSURE") == 2
+          assert s.count("VERIFIED_CLOSURE_EDGE") == 15
+          PY
+      - name: Quiesce compiler processes before checkpoint
+        if: always()
+        shell: bash
+        run: |
+          pkill -TERM -x lake || true
+          pkill -TERM -x lean || true
+          sleep 3
+          pkill -KILL -x lake || true
+          pkill -KILL -x lean || true
+          sleep 1
+      - name: Save shared frontier cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: upstream/lean/.lake/build
+          key: rfh-bridge-final-v42-4341-${{ runner.os }}-${{ github.run_id }}
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfh-bridge-final-v42-${{ github.run_id }}
+          path: bridge/assembly-logs/
+          if-no-files-found: ignore
