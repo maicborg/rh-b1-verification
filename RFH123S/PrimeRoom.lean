@@ -31,7 +31,7 @@ lemma eventually_prime_room (h : ℕ) :
   have hcoef : (11*10^36 : ℝ) ≤ (11^7/5040 : ℝ)*u := by
     norm_num
     linarith
-  have hex := Real.pow_div_factorial_le_exp (show 0 ≤ 11*u by positivity) 7
+  have hex := Real.pow_div_factorial_le_exp (11*u) (show 0 ≤ 11*u by positivity) 7
   norm_num at hex
   have hL : 11*B^6 ≤ exp (11*u) := calc
     11*B^6 = (11*10^36 : ℝ)*u^6 := by dsimp [B]; ring
