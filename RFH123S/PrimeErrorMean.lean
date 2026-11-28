@@ -12,7 +12,7 @@ theorem norm_logDerivMean_le (s : ℂ) (B : ℝ) (hB : 0 ≤ B)
   have hp : (0:ℝ) < M.totient := by exact_mod_cast Nat.totient_pos.mpr (NeZero.pos M)
   have hcard : Fintype.card (DirichletCharacter ℂ M) = M.totient := by
     rw [← Nat.card_eq_fintype_card]
-    exact DirichletCharacter.card_eq_totient_of_hasEnoughRootsOfUnity
+    exact DirichletCharacter.card_eq_totient_of_hasEnoughRootsOfUnity ℂ M
   unfold logDerivMean
   rw [norm_div]
   have hh : ‖(∑ χ : DirichletCharacter ℂ M,

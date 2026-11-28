@@ -13,10 +13,16 @@ lemma centeredKernel_eq (g : ℂ → ℂ) {s : ℂ} (hs : s ≠ 1) :
   · simp [h0]
   · field_simp [hs, h0] <;> ring
 
-lemma centeredKernel_analyticAt (g : ℂ → ℂ) {s : ℂ}
-    (hg : AnalyticAt ℂ g s) (hs : s ≠ 0) :
+lemma centeredKernel_analyticAt (g : ℂ → ℂ) {U : Set ℂ} {s : ℂ}
+    (hU : IsOpen U) (hg : AnalyticOnNhd ℂ g U) (hsU : s ∈ U) (hs : s ≠ 0) :
     AnalyticAt ℂ (centeredKernel g) s := by
-  exact (hg.dslope 1).div analyticAt_id hs
+  have hgd : DifferentiableOn ℂ g U := fun z hz ↦
+    (hg z hz).differentiableAt.differentiableWithinAt
+  have hd : DifferentiableOn ℂ (dslope g 1) U := by
+    by_cases h1 : (1:ℂ) ∈ U
+    · exact (Complex.differentiableOn_dslope (hU.mem_nhds h1)).2 hgd
+    · exact (differentiableOn_dslope_of_notMem h1).2 hgd
+  exact ((hd.analyticOnNhd hU) s hsU).div analyticAt_id hs
 
 lemma centeredKernel_at_one (g : ℂ → ℂ) :
     centeredKernel g 1 = deriv g 1 := by simp [centeredKernel]

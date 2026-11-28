@@ -10,7 +10,7 @@ open ArithmeticFunction DirichletCharacter Complex Finset Filter MeasureTheory N
 namespace RFH123S
 variable {d M : ℕ} [Fact d.Prime] [NeZero M]
 
-theorem primeError_laplace_explicit (h : M.Coprime d) (s : ℂ) (u : 2 < s.re) :
+theorem primeError_laplace_explicit (hd : d % 8 = 7) (h : M.Coprime d) (s : ℂ) (u : 2 < s.re) :
     (logDerivMean d M s / s - (logDerivMean d M 1).re) / (s - 1) =
       ∫ v in Set.Ioi (0 : ℝ), (primeError d M (Real.exp v) : ℂ) *
         Complex.exp ((1 - s) * (v : ℂ)) := by
@@ -37,7 +37,7 @@ theorem primeError_laplace_explicit (h : M.Coprime d) (s : ℂ) (u : 2 < s.re) :
   linear_combination (norm := field (disch := grind [zero_re, one_re])) e 1 / s - e 0 / (s - 1)
   grind [ofReal_one]
   
-theorem logDerivMean_real_at_one (h : M.Coprime d) :
+theorem logDerivMean_real_at_one (hd : d % 8 = 7) (h : M.Coprime d) :
     logDerivMean d M 1 = ((logDerivMean d M 1).re : ℂ) := by
   let κ := (logDerivMean d M 1).re
   have A : AnalyticOnNhd ℂ (fun s ↦ logDerivMean d M s / s - κ) {s | 1 ≤ s.re} := fun _ _ ↦ by
@@ -46,7 +46,7 @@ theorem logDerivMean_real_at_one (h : M.Coprime d) :
     exact @ext _ 0 (by simp [κ]) ((A.mono (by aesop)
       ).im_ofReal.eqOn_zero_of_preconnected_of_eventuallyEq_zero isPreconnected_Ici (by simp) (.mono
       (lt_mem_nhds (lt_add_one _)) fun x u ↦
-        congr(im $((div_eq_iff (by aesop)).1 (primeError_laplace_explicit h x u))).trans
+        congr(im $((div_eq_iff (by aesop)).1 (primeError_laplace_explicit hd h x u))).trans
         (by norm_cast)) (le_refl (1 : ℝ)))
   exact sub_eq_zero.mp (by simpa [κ] using hzero)
 

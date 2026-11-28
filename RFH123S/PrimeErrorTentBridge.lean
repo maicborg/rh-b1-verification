@@ -14,6 +14,7 @@ lemma tent_main_lower (x q k e A B C : ℝ) (hx : 0 < x) (hq : 0 < q)
   have hc := (abs_le.mp hC).1
   have hm := congrArg (fun t : ℝ ↦ t / q) (tent_log_main x hx)
   simp only [sub_div, add_div, mul_div_assoc] at hm
+  rw [show 3*(x/2) = 3*x/2 by ring] at hm
   linarith
 
 /-- Generic support extraction from a nonnegative tent.  The nonprime mass

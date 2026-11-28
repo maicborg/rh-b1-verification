@@ -32,7 +32,7 @@ theorem growth_assemble (q : ℝ) (s c A Z : ℂ) (hq : 1 ≤ q)
     rw [norm_mul]
     calc
       _ ≤ 1 * (1 + 3*‖s‖*‖s-1‖) := mul_le_mul hc hz (norm_nonneg _) (by norm_num)
-      _ ≤ _ := by gcongr; linarith
+      _ ≤ _ := by nlinarith [mul_le_mul_of_nonneg_left hs (by positivity : 0 ≤ 3*‖s‖)]
   have h2 : ‖(s-1)*A‖ ≤ (‖s‖+1)*((4+5*‖s‖)*q) := by
     rw [norm_mul]
     exact mul_le_mul hs ha (norm_nonneg _) (by positivity)

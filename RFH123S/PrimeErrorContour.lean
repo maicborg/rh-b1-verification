@@ -33,11 +33,13 @@ theorem poleFree_vertical_shift {a b : ℝ} {f : ℂ → ℂ}
     exact (((hbot.comp tendsto_neg_atTop_atBot).sub htop).add
       ((intervalIntegral_tendsto_integral hb tendsto_neg_atTop_atBot tendsto_id).const_smul I)).sub
       ((intervalIntegral_tendsto_integral ha tendsto_neg_atTop_atBot tendsto_id).const_smul I)
-  have hconst : Tendsto R atTop (𝓝 (0 : ℂ)) := by simp [hz]
+  have hconst : Tendsto R atTop (𝓝 (0 : ℂ)) := by
+    rw [show R = fun _ ↦ (0:ℂ) from funext hz]
+    exact tendsto_const_nhds
   have heq := tendsto_nhds_unique hlim hconst
   have hh : I * (∫ y : ℝ, f (b + y * I)) = I * (∫ y : ℝ, f (a + y * I)) :=
     sub_eq_zero.mp (by simpa [smul_eq_mul] using heq)
   exact (mul_left_cancel₀ I_ne_zero hh).symm
 
 #print axioms poleFree_vertical_shift
-end
+end RFH123S
