@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [PrimeAnalyticScalar]
+        module: [TailKernel, TailIdentity, PrimeWindowLower]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
