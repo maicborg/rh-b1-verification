@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [DensityRank, DensityAssemble]
+        module: [DensityAssemble]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4

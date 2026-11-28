@@ -25,7 +25,11 @@ theorem eventually_density_parameters (N : ℕ) :
           0 < T ∧ ((3 : ℝ)^(Nat.log 3 s+5)*2^s)/T ≤
             exp (40*sqrt (u*log u)) := by
   let C : ℝ := 10^10*((N : ℝ)+1)
-  have hC : 1 ≤ C := by dsimp [C]; positivity
+  have hC : 1 ≤ C := by
+    have hN : 0 ≤ (N : ℝ) := by positivity
+    dsimp [C]
+    norm_num
+    linarith
   filter_upwards [eventually_density_log_scales C hC,
     eventually_ge_atTop (max 4 (exp 1))] with u hu hU o hm hsu
   have hu4 : 4 ≤ u := (le_max_left _ _).trans hU

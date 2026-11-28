@@ -20,7 +20,9 @@ lemma prime_family_from_windows (P : Parameters) (s : ℕ) (L : ℝ)
     have h := mul_le_mul_of_nonneg_right (show 2 * (i.val : ℝ) ≤
       2 * (classNumber P.K : ℝ) + 1 by linarith) (Real.sqrt_nonneg L)
     constructor
-    · dsimp [U]; positivity
+    · dsimp [U]
+      have hn : 0 ≤ 2 * (i.val : ℝ) * sqrt L := by positivity
+      linarith
     · exact (show U i ≤ 11 * L by dsimp [U]; linarith).trans hV
   choose p hp hm hl using fun i => hw (U i) (hU i)
   have hmono : StrictMono p := by
@@ -42,4 +44,5 @@ lemma prime_family_from_windows (P : Parameters) (s : ℕ) (L : ℝ)
   exact ⟨(hU i).1.trans (hl i).1,
     (hl i).2.trans (by dsimp [U]; nlinarith)⟩
 
+#print axioms prime_family_from_windows
 end RFH123S

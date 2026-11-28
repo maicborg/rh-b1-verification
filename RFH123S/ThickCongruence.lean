@@ -14,9 +14,18 @@ lemma thick_coset_congruence (P : Parameters) (s : ℕ)
   let M := P.N₀ * 3 ^ (Nat.log 3 s + 5)
   intro σ hσ
   obtain ⟨e, rfl⟩ := hT σ hσ
-  simp [M, P.placeClass_placeOfInt isCoprime_one_left.neg_left,
-    P.placeClass_placeOfInt (show IsCoprime ((M : ℤ) + 1) P.N₀ by
-      mod_cast (by simp [M])),
-    Units.ext_iff, (ZMod.natCast_eq_zero_iff M m).2 hd]
+  have H := @Parameters.placeClass_placeOfInt P s (M + 1)
+    (mod_cast by simp [M]) (m := m) (d := d)
+  have hz : (M : ZMod m) = 0 := (ZMod.natCast_eq_zero_iff M m).2 hd
+  change P.placeClass d (P.placeOfInt s (-1) * (P.placeOfInt s ((M : ℤ) + 1)) ^ e) = -1
+  have hp : P.placeClass d (P.placeOfInt s ((M : ℤ) + 1)) = 1 := by
+    apply Units.ext
+    rw [H]
+    simp [hz]
+  rw [map_mul, map_pow, hp, one_pow, mul_one]
+  apply Units.ext
+  simpa using (@Parameters.placeClass_placeOfInt P s (-1)
+    isCoprime_one_left.neg_left (m := m) (d := d))
 
+#print axioms thick_coset_congruence
 end RFH123S
