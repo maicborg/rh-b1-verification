@@ -68,4 +68,6 @@ run ThickDensity ThickCongruence DensityAssemble
 run PrimeRoom
 run DataAssembly ThickDensity PrimeWindows PrimeRoom ScaleEventually RankScale Producers
 run AnalyticFrontier ReducedFinal DataAssembly
+run PrimeAnalyticScalar
+run TailIntegral
 exit "$status"
