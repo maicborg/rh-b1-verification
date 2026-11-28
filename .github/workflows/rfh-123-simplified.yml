@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [TailKernel, TailIdentity, AbelStep]
+        module: [TentKernel, LogDisk]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -44,6 +44,38 @@ jobs:
         with:
           name: micro-${{ matrix.module }}
           path: micro-*.log
+  literature:
+    name: "Literature | pinned Perron and contour audit"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: AlexKontorovich/PrimeNumberTheoremAnd
+          ref: 127b50e33f6033e2147921167a117af96d9ba4ea
+          path: literature-pnt
+      - name: Install pinned Lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build only Perron dependencies
+        working-directory: literature-pnt
+        run: |
+          set -o pipefail
+          lake exe cache get
+          lake build +PrimeNumberTheoremAnd.PerronFormula 2>&1 | tee "$GITHUB_WORKSPACE/perron-build.log"
+      - name: Check theorem signatures and axioms
+        working-directory: literature-pnt
+        run: |
+          set -o pipefail
+          lake env lean "$GITHUB_WORKSPACE/RFH123S/PerronLiteratureAudit.lean" 2>&1 | tee "$GITHUB_WORKSPACE/perron-audit.log"
+          python3 -c 'import re; s=open("../perron-audit.log").read(); a=re.findall(r"depends on axioms: \\[([^\\]]*)\\]",s); assert len(a)==5,a; assert all(set(x.strip() for x in l.split(",") if x.strip())<={"propext","Classical.choice","Quot.sound"} for l in a),a'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perron-literature-audit
+          path: perron-*.log
   geometry:
     if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[scalar-only]') }}
     name: Dependency audit | minimal final closure
